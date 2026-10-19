@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+env/
+ENV/
+
+# Binaries & Executables
+build/
+dist/
+*.exe
+*.spec
+
+# Video recordings & snapshots (keep folders, ignore media files)
+recordings/*.mp4
+recordings/*.mkv
+snapshots/*.jpg
+!recordings/.gitkeep
+!snapshots/.gitkeep
+
+# Sensitive Google Cloud credentials & tokens
+credentials/
+*service_account*.json
+token.json
+credentials.json
+
+# Local runtime logs & state
+*.log
+recordings_db.json
+.system_generated/

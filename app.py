@@ -1,0 +1,1103 @@
+import asyncio
+import io
+import os
+import re
+import socket
+import struct
+import subprocess
+import threading
+import time
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, Response, Request, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from talk_protocol import FoscamTalkSession, generate_sound_effect, transcode_audio_to_pcm
+from recorder import recorder_manager, RECORDINGS_DIR
+from gdrive_sync import gdrive_manager, CREDENTIALS_DIR
+
+app = FastAPI(title="Foscam Control Center", version="2.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE_DIR = Path(__file__).resolve().parent
+SNAPSHOTS_DIR = BASE_DIR / "snapshots"
+STATIC_DIR = BASE_DIR / "static"
+SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+
+class FoscamCamera:
+    def __init__(self, ip: str = "192.168.1.13", port: int = 88, usr: str = "admin", pwd: str = ""):
+        self.ip = ip
+        self.port = port
+        self.usr = usr
+        self.pwd = pwd
+        self.last_seen = time.time()
+        self.mac = "00626E4EBBF1"
+        self.model = "FI9821W V2"
+        self.is_online = True
+        
+        # Concurrency serialization lock for camera HTTP port 88
+        self.cgi_lock = threading.Lock()
+        
+        # In-memory cache to prevent camera embedded web server starvation
+        self.cached_info = {
+            "productName": "FI9821W V2",
+            "devName": "FI9821W",
+            "mac": "00626E4EBBF1",
+            "firmwareVer": "1.11.1.18",
+            "hardwareVer": "1.4.1.8"
+        }
+        self.cached_ports = {
+            "httpPort": "88",
+            "httpsPort": "443",
+            "rtspPort": "88",
+            "mediaPort": "88"
+        }
+        self.cached_state = {
+            "motionDetectAlarm": "0",
+            "infraLedState": "0",
+            "ioAlarm": "0"
+        }
+        self.cached_wifi = {
+            "connected": True,
+            "ssid": "CASA DE LA LOCURA",
+            "signal": 94,
+            "quality": "Excelente",
+            "bars": 4,
+            "bssid": "D4:01:68:BE:20:00"
+        }
+        
+        # Start gentle background state poller
+        self.poller_thread = threading.Thread(target=self._state_refresher, daemon=True)
+        self.poller_thread.start()
+
+    def get_wifi_details(self) -> Dict[str, Any]:
+        """Parses active Wi-Fi configuration and real-time signal percentage from camera."""
+        try:
+            conf = self.cgi_request("getWifiConfig", timeout=2.5)
+            raw_ssid = conf.get("connectedAP") or conf.get("ssid") or ""
+            ssid = urllib.parse.unquote_plus(raw_ssid)
+            is_connected = conf.get("isConnected") == "1"
+
+            wlist = self.cgi_request("getWifiList", timeout=3.5)
+            signal = 0
+            bssid = ""
+            for k, v in wlist.items():
+                if k.startswith("ap") and v:
+                    dec = urllib.parse.unquote_plus(v)
+                    parts = dec.split("+")
+                    if len(parts) >= 3:
+                        ap_ssid = parts[0]
+                        ap_bssid = parts[1]
+                        try:
+                            ap_sig = int(parts[2])
+                        except Exception:
+                            ap_sig = 0
+                        if ap_ssid.strip().lower() == ssid.strip().lower():
+                            signal = ap_sig
+                            bssid = ap_bssid
+                            break
+
+            if signal >= 80:
+                quality, bars = "Excelente", 4
+            elif signal >= 60:
+                quality, bars = "Bueno", 3
+            elif signal >= 40:
+                quality, bars = "Regular", 2
+            elif signal > 0:
+                quality, bars = "Débil", 1
+            else:
+                quality, bars = ("Sin señal" if not is_connected else "Conectado"), 0
+
+            res = {
+                "connected": is_connected,
+                "ssid": ssid,
+                "signal": signal,
+                "quality": quality,
+                "bars": bars,
+                "bssid": bssid
+            }
+            self.cached_wifi = res
+            return res
+        except Exception as e:
+            print(f"get_wifi_details error: {e}")
+            return self.cached_wifi
+
+    def ensure_max_volume(self):
+        """Forces camera speaker volume to 100% (only writes when it differs)."""
+        try:
+            cur = self.cgi_request("getAudioSetting", timeout=2.5)
+            if cur.get("volume") != "100":
+                self.cgi_request("setAudioVolume", {"volume": 100}, timeout=2.5)
+        except Exception as e:
+            print(f"ensure_max_volume error: {e}")
+
+    def _state_refresher(self):
+        """Refreshes camera state gently every 6 seconds in background without locking up UI."""
+        consecutive_errors = 0
+        time.sleep(1.0)
+        self.ensure_max_volume()
+        self.get_wifi_details()
+        wifi_cycle = 0
+        while True:
+            try:
+                time.sleep(6.0)
+                wifi_cycle += 1
+                if wifi_cycle >= 5:
+                    wifi_cycle = 0
+                    self.get_wifi_details()
+                state = self.cgi_request("getDevState", timeout=2.5)
+                if state.get("result") == "0" or "motionDetectAlarm" in state:
+                    self.cached_state.update(state)
+                    self.is_online = True
+                    self.last_seen = time.time()
+                    if consecutive_errors > 0:
+                        # camera came back (e.g. after reboot): restore 100% volume
+                        self.ensure_max_volume()
+                    consecutive_errors = 0
+                else:
+                    consecutive_errors += 1
+
+                # If needed, refresh device info and ports once on startup
+                if self.cached_info.get("firmwareVer") == "1.11.1.18" and consecutive_errors == 0:
+                    info = self.cgi_request("getDevInfo", timeout=2.5)
+                    if info.get("result") == "0":
+                        self.cached_info.update(info)
+                    ports = self.cgi_request("getPortInfo", timeout=2.5)
+                    if ports.get("result") == "0":
+                        self.cached_ports.update(ports)
+
+                # Only if unreachable for over 30 seconds, trigger UDP discovery
+                if consecutive_errors >= 5:
+                    self.is_online = False
+                    new_ip = self.discover_ip()
+                    if new_ip:
+                        self.ip = new_ip
+                        consecutive_errors = 0
+            except Exception as e:
+                consecutive_errors += 1
+                if consecutive_errors >= 5:
+                    self.is_online = False
+
+    def discover_ip(self) -> Optional[str]:
+        msg = bytes([
+            0x4d, 0x4f, 0x5f, 0x49, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+        ])
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.settimeout(1.5)
+        found_ip = None
+        try:
+            for target in ["255.255.255.255", "192.168.1.255"]:
+                try:
+                    s.sendto(msg, (target, 10000))
+                    s.sendto(msg, (target, 10001))
+                except Exception:
+                    pass
+
+            start = time.time()
+            while time.time() - start < 1.5:
+                try:
+                    data, addr = s.recvfrom(1024)
+                    if b"FI9821W" in data or b"00626E" in data:
+                        found_ip = addr[0]
+                        self.ip = found_ip
+                        self.is_online = True
+                        break
+                except socket.timeout:
+                    break
+        except Exception as e:
+            print(f"Discovery error: {e}")
+        finally:
+            s.close()
+        return found_ip
+
+    def cgi_request(self, cmd: str, params: Optional[Dict[str, Any]] = None, timeout: float = 3.0) -> Dict[str, str]:
+        with self.cgi_lock:
+            p = {"cmd": cmd, "usr": self.usr, "pwd": self.pwd}
+            if params:
+                p.update(params)
+            
+            query = urllib.parse.urlencode(p)
+            url = f"http://{self.ip}:{self.port}/cgi-bin/CGIProxy.fcgi?{query}"
+
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "FoscamControlCenter"})
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    raw_xml = resp.read().decode("utf-8", errors="ignore")
+                    self.is_online = True
+                    self.last_seen = time.time()
+                    return self._parse_xml(raw_xml)
+            except Exception as e:
+                # Do NOT block with UDP discover here! Simply log and return error
+                print(f"CGI request error ({cmd}): {e}")
+                return {"result": "-1", "error": str(e)}
+
+    def get_snapshot_bytes(self, timeout: float = 3.0) -> bytes:
+        with self.cgi_lock:
+            url = f"http://{self.ip}:{self.port}/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr={self.usr}&pwd={self.pwd}"
+            req = urllib.request.Request(url, headers={"User-Agent": "FoscamControlCenter"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                self.is_online = True
+                return resp.read()
+
+    def _parse_xml(self, xml_text: str) -> Dict[str, str]:
+        res = {}
+        try:
+            root = ET.fromstring(xml_text)
+            for child in root:
+                res[child.tag] = child.text or ""
+        except Exception:
+            matches = re.findall(r'<([a-zA-Z0-9_]+)>([^<]*)</\1>', xml_text)
+            for tag, val in matches:
+                res[tag] = val
+        return res
+
+MIC_GAIN = 5.0  # software boost applied to the browser microphone
+
+camera = FoscamCamera()
+talk_session = FoscamTalkSession(ip=camera.ip, port=camera.port, user=camera.usr, pwd=camera.pwd)
+
+# Ultra-fast Low-Latency RTSP Stream Worker via FFmpeg Hardware Stream
+class RTSPStreamWorker:
+    def __init__(self, camera_obj: FoscamCamera):
+        self.camera = camera_obj
+        self.mode = "sub" # "sub" (fast 450p) or "main" (720p HD)
+        self.latest_frame = None
+        self.last_update = 0
+        self.running = True
+        self.lock = threading.Lock()
+        self.proc = None
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def set_mode(self, mode: str):
+        if mode in ["sub", "main"] and mode != self.mode:
+            self.mode = mode
+            if self.proc and self.proc.poll() is None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+
+    def restart(self):
+        """Immediately terminates current FFmpeg process and clears buffer to force fresh RTSP handshake."""
+        if self.proc and self.proc.poll() is None:
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+        with self.lock:
+            self.latest_frame = None
+            self.last_update = 0
+
+    def _run(self):
+        while self.running:
+            rtsp_url = f"rtsp://{self.camera.usr}:{self.camera.pwd}@{self.camera.ip}:{self.camera.port}/videoMain"
+            scale_filter = "scale=800:-1" if self.mode == "sub" else "scale=1280:-1"
+            
+            # Ultra low-latency flags:
+            # -fflags nobuffer: eliminates internal FFmpeg buffering
+            # -flags low_delay: forces lowest decoding latency
+            # -avioflags direct: bypasses I/O buffering
+            # -probesize 32768 -analyzeduration 0: starts stream instantly without delay
+            cmd = [
+                'ffmpeg',
+                '-loglevel', 'warning',
+                '-rtsp_transport', 'tcp',
+                '-fflags', 'nobuffer',
+                '-flags', 'low_delay',
+                '-strict', 'experimental',
+                '-avioflags', 'direct',
+                '-fflags', '+discardcorrupt',
+                '-probesize', '32768',
+                '-analyzeduration', '0',
+                '-i', rtsp_url,
+                '-vf', scale_filter,
+                '-f', 'mjpeg',
+                '-q:v', '5',
+                '-r', '20',
+                '-flush_packets', '1',
+                '-an',
+                '-'
+            ]
+            try:
+                self.proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=0
+                )
+                buf = bytearray()
+                while self.running and self.proc.poll() is None:
+                    chunk = self.proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    buf.extend(chunk)
+                    
+                    # Parse all complete frames in buffer, saving only the newest
+                    newest_frame = None
+                    while True:
+                        soi = buf.find(b'\xff\xd8')
+                        if soi == -1:
+                            buf.clear()
+                            break
+                        eoi = buf.find(b'\xff\xd9', soi + 2)
+                        if eoi == -1:
+                            if soi > 0:
+                                del buf[:soi]
+                            break
+                        newest_frame = bytes(buf[soi:eoi+2])
+                        del buf[:eoi+2]
+
+                    if newest_frame:
+                        with self.lock:
+                            self.latest_frame = newest_frame
+                            self.last_update = time.time()
+
+                if self.proc and self.proc.poll() is None:
+                    self.proc.terminate()
+            except Exception as e:
+                print(f"StreamWorker error: {e}")
+            time.sleep(1.0)
+
+rtsp_worker = RTSPStreamWorker(camera)
+
+# Request Models
+class PTZMoveRequest(BaseModel):
+    direction: str
+    mode: Optional[str] = "step"       # "step" (clean jog mode) or "continuous"
+    duration: Optional[int] = 250      # milliseconds for step mode (e.g. 150, 250, 500)
+
+class PTZSpeedRequest(BaseModel):
+    speed: int
+
+class PTZPresetRequest(BaseModel):
+    name: str
+
+class PTZCruiseRequest(BaseModel):
+    cruise_type: str
+
+class ImageSettingsRequest(BaseModel):
+    brightness: Optional[int] = None
+    contrast: Optional[int] = None
+    saturation: Optional[int] = None
+    hue: Optional[int] = None
+    sharpness: Optional[int] = None
+
+class InfraLedRequest(BaseModel):
+    mode: Optional[str] = None
+    state: Optional[str] = None
+
+class MotionDetectRequest(BaseModel):
+    isEnable: int
+    sensitivity: int
+    triggerInterval: int
+
+class WifiConnectRequest(BaseModel):
+    ssid: str
+    psk: str
+
+class StreamModeRequest(BaseModel):
+    mode: str  # "sub" or "main"
+
+class PlaySoundRequest(BaseModel):
+    sound: str  # "chime", "siren", "alert", "dog"
+
+class RecordingConfigRequest(BaseModel):
+    enabled: Optional[bool] = None
+    stream_mode: Optional[str] = None
+    segment_duration: Optional[int] = None
+    delete_after_upload: Optional[bool] = None
+
+class GDriveConfigRequest(BaseModel):
+    folder_name: Optional[str] = None
+    auto_upload: Optional[bool] = None
+    delete_after_upload: Optional[bool] = None
+
+class GDrivePasteRequest(BaseModel):
+    credentials_json: str
+    filename: Optional[str] = "service_account.json"
+
+# Endpoints
+@app.get("/")
+def get_index():
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Foscam Control Center running."}
+
+@app.get("/manifest.json")
+def get_manifest():
+    manifest_file = STATIC_DIR / "manifest.json"
+    if manifest_file.exists():
+        return FileResponse(manifest_file, media_type="application/manifest+json")
+    raise HTTPException(status_code=404, detail="Manifest not found")
+
+@app.get("/sw.js")
+def get_sw():
+    sw_file = STATIC_DIR / "sw.js"
+    if sw_file.exists():
+        return FileResponse(sw_file, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Service worker not found")
+
+@app.get("/api/status")
+def get_status():
+    """Returns cached device info, state and Wi-Fi signal instantly in <1ms without burdening camera."""
+    return {
+        "online": camera.is_online,
+        "ip": camera.ip,
+        "port": camera.port,
+        "model": camera.cached_info.get("productName", "FI9821W V2"),
+        "devName": camera.cached_info.get("devName", "FI9821W"),
+        "mac": camera.cached_info.get("mac", camera.mac),
+        "firmware": camera.cached_info.get("firmwareVer", "1.11.1.18"),
+        "hardware": camera.cached_info.get("hardwareVer", "1.4.1.8"),
+        "streamMode": rtsp_worker.mode,
+        "ports": camera.cached_ports,
+        "state": camera.cached_state,
+        "wifi": camera.cached_wifi
+    }
+
+@app.get("/api/wifi/signal")
+def get_wifi_signal():
+    """Queries camera for latest real-time Wi-Fi signal strength and details."""
+    return camera.get_wifi_details()
+
+@app.post("/api/camera/reconnect")
+def reconnect_camera():
+    """
+    Safely restarts video streaming pipeline, tests camera connection,
+    refreshes Wi-Fi signal, and ensures maximum audio volume.
+    """
+    is_alive = False
+    try:
+        state = camera.cgi_request("getDevState", timeout=2.0)
+        if state.get("result") == "0" or "motionDetectAlarm" in state:
+            is_alive = True
+    except Exception:
+        pass
+
+    if not is_alive:
+        new_ip = camera.discover_ip()
+        if new_ip:
+            camera.ip = new_ip
+            is_alive = True
+
+    # 1. Restart RTSP Stream Worker
+    rtsp_worker.restart()
+
+    # 2. Reset talk session if any
+    try:
+        talk_session.stop(drain_time=0.1)
+    except Exception:
+        pass
+
+    # 3. Ensure volume and get updated Wi-Fi details
+    camera.ensure_max_volume()
+    wifi = camera.get_wifi_details()
+
+    return {
+        "status": "reconnected" if is_alive else "unreachable",
+        "online": is_alive,
+        "ip": camera.ip,
+        "wifi": wifi
+    }
+
+@app.post("/api/stream/mode")
+def set_stream_mode(req: StreamModeRequest):
+    rtsp_worker.set_mode(req.mode)
+    return {"mode": rtsp_worker.mode}
+
+async def generate_mjpeg_stream(request: Request):
+    """Ultra-responsive real-time stream generator backed by FFmpeg RTSP worker."""
+    last_sent = 0
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            frame = rtsp_worker.latest_frame
+            curr_time = rtsp_worker.last_update
+            
+            if frame and curr_time > last_sent:
+                last_sent = curr_time
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+                    + frame + b"\r\n"
+                )
+                await asyncio.sleep(0.03)
+            else:
+                await asyncio.sleep(0.02)
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
+
+@app.get("/api/stream")
+def get_stream(request: Request):
+    return StreamingResponse(
+        generate_mjpeg_stream(request),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, pre-check=0, post-check=0, max-age=0, no-transform",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Accel-Buffering": "no",
+            "Connection": "close"
+        }
+    )
+
+@app.websocket("/ws/stream")
+async def websocket_stream(websocket: WebSocket):
+    """
+    High-performance real-time video stream over WebSocket.
+    Zero buffering through Cloudflare Tunnel, sub-50ms latency, 100% reliable on mobile!
+    """
+    await websocket.accept()
+    last_sent = 0
+    try:
+        init_frame = rtsp_worker.latest_frame
+        if init_frame:
+            await websocket.send_bytes(init_frame)
+            last_sent = rtsp_worker.last_update
+
+        while True:
+            frame = rtsp_worker.latest_frame
+            curr_time = rtsp_worker.last_update
+            if frame and curr_time > last_sent:
+                last_sent = curr_time
+                await websocket.send_bytes(frame)
+                await asyncio.sleep(0.035)
+            else:
+                await asyncio.sleep(0.015)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
+def generate_audio_stream():
+    """Streams live microphone audio from the camera transcoded to MP3."""
+    cmd = [
+        'ffmpeg',
+        '-rtsp_transport', 'tcp',
+        '-i', f'rtsp://{camera.usr}:{camera.pwd}@{camera.ip}:{camera.port}/audio',
+        '-f', 'mp3',
+        '-acodec', 'libmp3lame',
+        '-ab', '64k',
+        '-ar', '16000',
+        '-'
+    ]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**5)
+    try:
+        while True:
+            chunk = proc.stdout.read(1024)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+
+@app.get("/api/audio/stream")
+def get_audio_stream():
+    return StreamingResponse(generate_audio_stream(), media_type="audio/mpeg")
+
+@app.websocket("/ws/talk")
+async def websocket_talk(websocket: WebSocket):
+    """Real-time push-to-talk bidirectional audio channel between browser mic and camera speaker."""
+    await websocket.accept()
+    talk_session.ip = camera.ip
+    talk_session.port = camera.port
+    talk_session.user = camera.usr
+    talk_session.pwd = camera.pwd
+
+    await asyncio.to_thread(camera.ensure_max_volume)
+    ok = await asyncio.to_thread(talk_session.start)
+    if not ok:
+        await websocket.send_json({"error": "Failed to open talk session on camera"})
+        await websocket.close()
+        return
+
+    await websocket.send_json({"status": "connected", "message": "Camera speaker ready"})
+    try:
+        while True:
+            message = await websocket.receive()
+            if "bytes" in message and message["bytes"]:
+                talk_session.send_pcm_bytes(message["bytes"], gain=MIC_GAIN)
+            elif "text" in message:
+                if message["text"] == "stop":
+                    break
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Talk WebSocket error: {e}")
+    finally:
+        # Gracefully drain queue and schedule socket teardown so camera speaker finishes playing
+        talk_session.stop_async(drain_time=1.8)
+
+_audio_playback_lock = threading.Lock()
+
+def _play_pcm_task(pcm_bytes: bytes, drain_time: float = 1.8):
+    """Safely serializes sound effects and file playback to prevent thread collisions."""
+    with _audio_playback_lock:
+        talk_session.ip = camera.ip
+        talk_session.port = camera.port
+        talk_session.user = camera.usr
+        talk_session.pwd = camera.pwd
+        camera.ensure_max_volume()
+        if talk_session.start():
+            talk_session.send_pcm_bytes(pcm_bytes)
+            talk_session.stop(drain_time=drain_time)
+
+@app.post("/api/audio/play_sound")
+def play_sound(req: PlaySoundRequest):
+    """Plays built-in sound effect (chime, siren, alert, dog) through camera speaker."""
+    pcm = generate_sound_effect(req.sound)
+    if not pcm:
+        raise HTTPException(status_code=400, detail="Invalid sound")
+    threading.Thread(target=_play_pcm_task, args=(pcm, 1.8), daemon=True).start()
+    return {"status": "playing", "sound": req.sound}
+
+@app.post("/api/audio/upload_and_play")
+async def upload_and_play(file: UploadFile = File(...)):
+    """Upload any audio file or recorded voice memo to play through camera speaker."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    pcm = transcode_audio_to_pcm(content)
+    if not pcm:
+        raise HTTPException(status_code=400, detail="Could not transcode audio file")
+
+    threading.Thread(target=_play_pcm_task, args=(pcm, 1.8), daemon=True).start()
+    return {"status": "playing", "size_pcm": len(pcm)}
+
+@app.post("/api/audio/talk_stop")
+def stop_talk():
+    talk_session.stop(drain_time=0.2)
+    return {"status": "stopped"}
+
+@app.get("/api/audio/talk_status")
+def talk_status():
+    return {"active": talk_session.is_connected()}
+
+@app.get("/api/snapshot")
+def get_snapshot():
+    if rtsp_worker.latest_frame:
+        return Response(content=rtsp_worker.latest_frame, media_type="image/jpeg")
+    try:
+        data = camera.get_snapshot_bytes(3.0)
+        return Response(content=data, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/snapshot/save")
+def save_snapshot():
+    try:
+        data = camera.get_snapshot_bytes(3.0)
+        filename = f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        filepath = SNAPSHOTS_DIR / filename
+        with open(filepath, "wb") as f:
+            f.write(data)
+        return {"success": True, "filename": filename, "url": f"/snapshots/{filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/gallery")
+def list_snapshots():
+    files = []
+    for p in sorted(SNAPSHOTS_DIR.glob("*.jpg"), key=os.path.getmtime, reverse=True):
+        files.append({
+            "filename": p.name,
+            "url": f"/snapshots/{p.name}",
+            "size": p.stat().st_size,
+            "time": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        })
+    return files
+
+@app.delete("/api/gallery/{filename}")
+def delete_snapshot(filename: str):
+    filepath = SNAPSHOTS_DIR / filename
+    if filepath.exists() and filepath.is_file():
+        filepath.unlink()
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="File not found")
+
+# ========================================================
+# RESPONSIVE, LOW-LAG PTZ CONTROLS (STEP & CONTINUOUS)
+# ========================================================
+_ptz_step_thread_lock = threading.Lock()
+
+@app.post("/api/ptz/move")
+async def ptz_move(req: PTZMoveRequest):
+    direction_map = {
+        "up": "ptzMoveUp",
+        "down": "ptzMoveDown",
+        "left": "ptzMoveLeft",
+        "right": "ptzMoveRight",
+        "upleft": "ptzMoveTopLeft",
+        "upright": "ptzMoveTopRight",
+        "downleft": "ptzMoveBottomLeft",
+        "downright": "ptzMoveBottomRight",
+        "stop": "ptzStopRun",
+        "center": "ptzReset"
+    }
+    cmd = direction_map.get(req.direction.lower())
+    if not cmd:
+        raise HTTPException(status_code=400, detail="Invalid direction")
+
+    if req.direction.lower() in ["stop", "center"]:
+        res = await asyncio.to_thread(camera.cgi_request, cmd)
+        return {"command": cmd, "result": res}
+
+    if req.mode == "continuous":
+        res = await asyncio.to_thread(camera.cgi_request, cmd)
+        return {"command": cmd, "result": res, "mode": "continuous"}
+    else:
+        # Step mode: moves camera for precise duration and stops automatically!
+        dur_sec = max(0.08, min(1.5, (req.duration or 250) / 1000.0))
+        
+        def _step_worker():
+            with _ptz_step_thread_lock:
+                camera.cgi_request(cmd)
+                time.sleep(dur_sec)
+                camera.cgi_request("ptzStopRun")
+
+        threading.Thread(target=_step_worker, daemon=True).start()
+        return {"command": cmd, "mode": "step", "duration_ms": int(dur_sec * 1000)}
+
+@app.post("/api/ptz/stop")
+async def ptz_stop():
+    res = await asyncio.to_thread(camera.cgi_request, "ptzStopRun")
+    return {"command": "ptzStopRun", "result": res}
+
+@app.post("/api/ptz/speed")
+def ptz_speed(req: PTZSpeedRequest):
+    speed = max(0, min(4, req.speed))
+    res = camera.cgi_request("setPTZSpeed", {"speed": speed})
+    return {"speed": speed, "result": res}
+
+@app.get("/api/ptz/presets")
+def get_presets():
+    res = camera.cgi_request("getPTZPresetPointList")
+    points = []
+    for i in range(16):
+        pt = res.get(f"point{i}")
+        if pt and pt.strip():
+            points.append(pt.strip())
+    return {"count": len(points), "presets": points}
+
+@app.post("/api/ptz/preset/goto")
+def goto_preset(req: PTZPresetRequest):
+    res = camera.cgi_request("ptzGotoPresetPoint", {"name": req.name})
+    return {"preset": req.name, "result": res}
+
+@app.post("/api/ptz/preset/add")
+def add_preset(req: PTZPresetRequest):
+    res = camera.cgi_request("ptzAddPresetPoint", {"name": req.name})
+    return {"preset": req.name, "result": res}
+
+@app.post("/api/ptz/preset/delete")
+def delete_preset(req: PTZPresetRequest):
+    res = camera.cgi_request("ptzDeletePresetPoint", {"name": req.name})
+    return {"preset": req.name, "result": res}
+
+@app.post("/api/ptz/cruise")
+def ptz_cruise(req: PTZCruiseRequest):
+    if req.cruise_type == "horizontal":
+        res = camera.cgi_request("ptzStartCruise", {"mapName": "Horizontal"})
+    elif req.cruise_type == "vertical":
+        res = camera.cgi_request("ptzStartCruise", {"mapName": "Vertical"})
+    else:
+        res = camera.cgi_request("ptzStopCruise")
+    return {"cruise": req.cruise_type, "result": res}
+
+@app.get("/api/image")
+def get_image_settings():
+    res = camera.cgi_request("getImageSetting")
+    return {
+        "brightness": int(res.get("brightness", 50)),
+        "contrast": int(res.get("contrast", 50)),
+        "saturation": int(res.get("saturation", 50)),
+        "hue": int(res.get("hue", 50)),
+        "sharpness": int(res.get("sharpness", 50)),
+        "denoiseLevel": int(res.get("denoiseLevel", 50))
+    }
+
+@app.post("/api/image")
+def set_image_settings(req: ImageSettingsRequest):
+    results = {}
+    if req.brightness is not None:
+        results["brightness"] = camera.cgi_request("setBrightness", {"brightness": req.brightness})
+    if req.contrast is not None:
+        results["contrast"] = camera.cgi_request("setContrast", {"contrast": req.contrast, "constrast": req.contrast})
+    if req.saturation is not None:
+        results["saturation"] = camera.cgi_request("setSaturation", {"saturation": req.saturation})
+    if req.hue is not None:
+        results["hue"] = camera.cgi_request("setHue", {"hue": req.hue})
+    if req.sharpness is not None:
+        results["sharpness"] = camera.cgi_request("setSharpness", {"sharpness": req.sharpness})
+    return {"success": True, "results": results}
+
+@app.post("/api/image/reset")
+def reset_image():
+    res = camera.cgi_request("resetImageSetting")
+    return {"result": res}
+
+@app.post("/api/image/flip")
+def flip_image():
+    res = camera.cgi_request("flipVideo")
+    return {"result": res}
+
+@app.post("/api/image/mirror")
+def mirror_image():
+    res = camera.cgi_request("mirrorVideo")
+    return {"result": res}
+
+@app.get("/api/led")
+def get_led_config():
+    cfg = camera.cgi_request("getInfraLedConfig")
+    mode = "auto" if cfg.get("mode") == "0" else "manual"
+    return {"mode": mode, "raw": cfg}
+
+@app.post("/api/led")
+def set_led_config(req: InfraLedRequest):
+    res = {}
+    if req.mode == "auto":
+        res["mode"] = camera.cgi_request("setInfraLedConfig", {"mode": "0"})
+    elif req.mode == "manual":
+        res["mode"] = camera.cgi_request("setInfraLedConfig", {"mode": "1"})
+
+    if req.state:
+        # Foscam firmware requires manual mode (mode: 1) before accepting open/closeInfraLed
+        camera.cgi_request("setInfraLedConfig", {"mode": "1"})
+        time.sleep(0.08)
+        if req.state == "on":
+            res["state"] = camera.cgi_request("openInfraLed")
+        else:
+            res["state"] = camera.cgi_request("closeInfraLed")
+    return res
+
+@app.get("/api/motion")
+def get_motion():
+    res = camera.cgi_request("getMotionDetectConfig")
+    return {
+        "isEnable": int(res.get("isEnable", 0)),
+        "sensitivity": int(res.get("sensitivity", 1)),
+        "triggerInterval": int(res.get("triggerInterval", 5)),
+        "linkage": int(res.get("linkage", 0)),
+        "raw": res
+    }
+
+@app.post("/api/motion")
+def set_motion(req: MotionDetectRequest):
+    params = {
+        "isEnable": str(req.isEnable),
+        "sensitivity": str(req.sensitivity),
+        "triggerInterval": str(req.triggerInterval),
+        "linkage": "0",
+        "snapInterval": "2"
+    }
+    res = camera.cgi_request("setMotionDetectConfig", params)
+    return {"result": res}
+
+@app.get("/api/wifi/config")
+def get_wifi_config():
+    res = camera.cgi_request("getWifiConfig")
+    ssid = res.get("ssid", "").replace("+", " ")
+    return {
+        "isEnable": res.get("isEnable"),
+        "isUseWifi": res.get("isUseWifi"),
+        "isConnected": res.get("isConnected"),
+        "ssid": ssid,
+        "encryptType": res.get("encryptType"),
+        "raw": res
+    }
+
+@app.get("/api/wifi/scan")
+def scan_wifi():
+    camera.cgi_request("refreshWifiList", timeout=12.0)
+    time.sleep(1.0)
+    res = camera.cgi_request("getWifiList", timeout=8.0)
+    networks = []
+    cur = int(res.get("curCnt", 0))
+    for i in range(cur):
+        raw_ap = res.get(f"ap{i}")
+        if raw_ap:
+            decoded = urllib.parse.unquote(raw_ap)
+            parts = decoded.split("+")
+            if len(parts) >= 3:
+                ssid = parts[0].replace("+", " ").strip()
+                mac = parts[1] if len(parts) > 1 else ""
+                signal = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+                is_encrypt = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+                networks.append({
+                    "ssid": ssid,
+                    "mac": mac,
+                    "signal": signal,
+                    "encrypted": is_encrypt > 0
+                })
+    networks.sort(key=lambda x: x["signal"], reverse=True)
+    return {"count": len(networks), "networks": networks}
+
+@app.post("/api/wifi/connect")
+def connect_wifi(req: WifiConnectRequest):
+    params = {
+        "isEnable": "1",
+        "isUseWifi": "1",
+        "ssid": req.ssid,
+        "psk": req.psk,
+        "encryptType": "3",
+        "authMode": "2",
+        "netType": "0"
+    }
+    res = camera.cgi_request("setWifiSetting", params)
+    return {"result": res}
+
+@app.post("/api/system/sync_time")
+def sync_time():
+    now = datetime.now()
+    params = {
+        "timeSource": "1",
+        "year": str(now.year),
+        "mon": str(now.month),
+        "day": str(now.day),
+        "hour": str(now.hour),
+        "min": str(now.minute),
+        "sec": str(now.second),
+        "timeZone": "-10800",
+        "isDst": "0"
+    }
+    res = camera.cgi_request("setSystemTime", params)
+    return {"result": res, "syncedTo": now.isoformat()}
+
+@app.post("/api/system/reboot")
+def reboot_camera():
+    res = camera.cgi_request("rebootSystem")
+    return {"result": res}
+
+# ========================================================
+# CONTINUOUS RECORDING & GOOGLE DRIVE CLOUD ENDPOINTS
+# ========================================================
+
+@app.get("/api/recording/status")
+def get_recording_status():
+    """Estado en tiempo real de la grabación continua y cuota de Google Drive."""
+    return recorder_manager.get_status()
+
+@app.post("/api/recording/toggle")
+def toggle_recording():
+    """Inicia o detiene la grabación continua segmentada."""
+    if recorder_manager.is_recording:
+        recorder_manager.stop_recording()
+        return {"is_recording": False, "message": "Grabación continua pausada"}
+    else:
+        success = recorder_manager.start_recording()
+        return {"is_recording": success, "message": "Grabación continua iniciada" if success else "Error al iniciar"}
+
+@app.post("/api/recording/config")
+def update_recording_config(req: RecordingConfigRequest):
+    """Actualiza configuración de grabación (calidad, duración de segmentos, borrado tras subida)."""
+    if req.stream_mode:
+        recorder_manager.stream_mode = req.stream_mode
+    if req.segment_duration:
+        recorder_manager.segment_duration = req.segment_duration
+    if req.delete_after_upload is not None:
+        recorder_manager.delete_after_upload = req.delete_after_upload
+    if req.enabled is not None:
+        if req.enabled and not recorder_manager.is_recording:
+            recorder_manager.start_recording()
+        elif not req.enabled and recorder_manager.is_recording:
+            recorder_manager.stop_recording()
+    recorder_manager.save_config()
+    return recorder_manager.get_status()
+
+@app.get("/api/recording/list")
+def get_recordings_list():
+    """Lista las grabaciones locales y su estado de subida a la nube."""
+    return recorder_manager.list_recordings()
+
+@app.delete("/api/recording/{filename}")
+def delete_recording(filename: str):
+    """Elimina una grabación local."""
+    recorder_manager.delete_recording(filename)
+    return {"status": "deleted", "filename": filename}
+
+@app.get("/api/gdrive/status")
+def get_gdrive_status():
+    """Consulta la conexión activa y cuota (5 TB) en Google Drive."""
+    return gdrive_manager.test_connection()
+
+@app.post("/api/gdrive/config")
+def update_gdrive_config(req: GDriveConfigRequest):
+    """Actualiza opciones de Google Drive (nombre de carpeta, subida automática)."""
+    if req.folder_name:
+        gdrive_manager.folder_name = req.folder_name
+    if req.auto_upload is not None:
+        gdrive_manager.auto_upload = req.auto_upload
+    if req.delete_after_upload is not None:
+        gdrive_manager.delete_after_upload = req.delete_after_upload
+        recorder_manager.delete_after_upload = req.delete_after_upload
+        recorder_manager.save_config()
+    gdrive_manager.save_config()
+    return gdrive_manager.test_connection()
+
+@app.post("/api/gdrive/upload_credentials")
+async def upload_gdrive_credentials(file: UploadFile = File(...)):
+    """Permite subir el archivo service_account.json o credentials.json directamente desde la app."""
+    content = await file.read()
+    text = content.decode("utf-8")
+    filename = file.filename or "service_account.json"
+    if not filename.endswith(".json"):
+        filename = "service_account.json"
+    res = gdrive_manager.save_credentials_data(text, filename)
+    test = gdrive_manager.test_connection()
+    return {"status": "saved", "type": res.get("type"), "test": test}
+
+@app.post("/api/gdrive/paste_credentials")
+def paste_gdrive_credentials(req: GDrivePasteRequest):
+    """Permite pegar directamente el contenido JSON de la cuenta de Google Drive."""
+    res = gdrive_manager.save_credentials_data(req.credentials_json, req.filename or "service_account.json")
+    test = gdrive_manager.test_connection()
+    return {"status": "saved", "type": res.get("type"), "test": test}
+
+@app.post("/api/gdrive/sync_now")
+def sync_gdrive_now():
+    """Fuerza la subida inmediata de todas las grabaciones locales a Google Drive."""
+    queued = 0
+    for f in RECORDINGS_DIR.glob("rec_*.mp4"):
+        fname = f.name
+        if fname not in recorder_manager.upload_queue:
+            rec_info = recorder_manager.db.get(fname, {})
+            if rec_info.get("status") != "uploaded":
+                recorder_manager.upload_queue.append(fname)
+                queued += 1
+    return {"queued": queued, "total_queue": len(recorder_manager.upload_queue)}
+
+@app.get("/api/gdrive/files")
+def get_gdrive_files():
+    """Lista los videos respaldados en la carpeta de Google Drive."""
+    return gdrive_manager.list_files()
+
+app.mount("/recordings", StaticFiles(directory=RECORDINGS_DIR), name="recordings")
+app.mount("/snapshots", StaticFiles(directory=SNAPSHOTS_DIR), name="snapshots")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

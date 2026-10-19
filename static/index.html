@@ -1,0 +1,2797 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Foscam Control Center - FI9821W V2</title>
+  
+  <!-- PWA & Mobile Web App Meta -->
+  <meta name="theme-color" content="#059669">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Foscam Control">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/icon-192.png">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #18181b; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    
+    .ptz-btn {
+      touch-action: manipulation;
+      user-select: none;
+      transition: all 0.12s ease;
+    }
+    .ptz-btn:active, .ptz-btn.active-key {
+      transform: scale(0.93);
+      filter: brightness(1.25);
+    }
+    .hud-btn {
+      transition: opacity 0.2s ease, transform 0.12s ease;
+    }
+    .hud-btn:hover {
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+          <i data-lucide="video" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-bold text-lg leading-tight tracking-tight">Foscam Control Center</h1>
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">FI9821W V2</span>
+          </div>
+          <p class="text-xs text-zinc-400" id="camIpBadge">Cámara: 192.168.1.13:88</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Wi-Fi Signal Badge -->
+        <div id="wifiSignalBadge" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs cursor-pointer hover:bg-zinc-800 transition" onclick="switchTab('wifi'); refreshWifiSignal();" title="Señal Wi-Fi de la Cámara - Clic para ver detalles">
+          <i data-lucide="wifi" id="wifiSignalIcon" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span class="font-bold text-emerald-400" id="wifiSignalText">--%</span>
+        </div>
+
+        <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" id="statusDot"></span>
+          <span class="text-zinc-300 font-medium" id="statusText">En Línea</span>
+        </div>
+
+        <!-- Botón Reconectar Cámara -->
+        <button onclick="reconnectCamera()" id="reconnectBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-xs text-zinc-200 border border-zinc-700/50 transition shadow" title="Reiniciar transmisión y reconectar cámara">
+          <i data-lucide="refresh-cw" id="reconnectIcon" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span id="reconnectText">Reconectar</span>
+        </button>
+
+        <!-- Botón Instalar App Móvil PWA -->
+        <button onclick="promptPwaInstall()" id="pwaInstallBtn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600 text-xs font-semibold text-emerald-300 hover:text-white transition shadow" title="Instalar Aplicación en Celular o PC">
+          <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+          <span>App Móvil</span>
+        </button>
+
+        <button onclick="syncClock()" class="hidden md:flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 transition" title="Sincronizar Hora">
+          <i data-lucide="clock" class="w-3.5 h-3.5 text-zinc-400"></i>
+          <span>Hora</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Live Feed + PTZ Joystick (Cols 7 on lg) -->
+    <section class="lg:col-span-7 flex flex-col space-y-4">
+      
+      <!-- Video Viewport Card -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl relative group">
+        <!-- Floating Status Badges on Video -->
+        <div class="absolute top-3 left-3 z-20 flex items-center space-x-2">
+          <span class="flex items-center space-x-1 bg-red-600/90 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full tracking-wider shadow">
+            <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+            <span>EN VIVO</span>
+          </span>
+          <span id="motionBadge" class="hidden items-center space-x-1 bg-amber-500 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow animate-bounce">
+            <i data-lucide="bell" class="w-3 h-3"></i>
+            <span>MOVIMIENTO</span>
+          </span>
+          <span id="streamDelayBadge" class="text-[10px] text-zinc-400 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur border border-white/10">
+            ⚡ Ultra Baja Latencia
+          </span>
+        </div>
+
+        <!-- Video Controls on Top Right -->
+        <div class="absolute top-3 right-3 z-20 flex items-center space-x-1.5 sm:space-x-2">
+          <button onclick="reconnectCamera()" class="px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-emerald-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Reconectar Transmisión">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span class="hidden sm:inline">Reconectar</span>
+          </button>
+          <button onclick="toggleAudio()" id="audioBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Escuchar Micrófono de la Cámara">
+            <i data-lucide="volume-x" id="audioIcon" class="w-3.5 h-3.5"></i>
+            <span id="audioText">Audio</span>
+          </button>
+          <button onclick="switchTab('intercom')" class="px-2.5 py-1 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-cyan-500/30 transition shadow flex items-center space-x-1" title="Abrir Walkie-Talkie">
+            <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+            <span>Hablar</span>
+          </button>
+          <button onclick="cycleNightVision()" id="nightVisionBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Visión Nocturna / Filtro Infrarrojo">
+            <i data-lucide="moon" id="nightVisionIcon" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span id="nightVisionText">🌙 Noche</span>
+          </button>
+          <button onclick="toggleStreamQuality()" id="qualityToggleBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-emerald-400 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Cambiar Calidad">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+            <span id="qualityText">⚡ Fluido (Rápido)</span>
+          </button>
+          <button onclick="takeSnapshot()" class="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Tomar Foto">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+          </button>
+          <button onclick="toggleFullscreen()" class="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Pantalla Completa">
+            <i data-lucide="maximize" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Floating Non-Intrusive Reconnect Alert -->
+        <div id="streamWarningBanner" class="hidden absolute top-12 left-1/2 -translate-x-1/2 z-20 bg-amber-600/90 text-white text-xs px-3.5 py-1 rounded-full shadow-lg font-medium backdrop-blur animate-pulse flex items-center space-x-1.5">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i>
+          <span>Reconectando señal en vivo...</span>
+        </div>
+
+        <!-- Video Player Viewport -->
+        <div class="relative aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden cursor-crosshair select-none" id="videoContainer">
+          <!-- Canvas: Hardware-accelerated, zero flicker, 60fps -->
+          <canvas id="videoCanvas" class="w-full h-full object-contain pointer-events-auto"></canvas>
+          <!-- Img fallback for browsers without canvas -->
+          <img 
+            id="videoFeed" 
+            src="" 
+            alt="Transmisión Foscam" 
+            class="hidden w-full h-full object-contain pointer-events-auto"
+          />
+
+          <!-- HUD On-Screen Direct Directional Controls (steer by tapping/hovering video edges) -->
+          <div class="absolute inset-0 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200">
+            <!-- HUD Up Arrow -->
+            <button onclick="triggerPtzAction('up')" class="hud-btn pointer-events-auto absolute top-12 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-emerald-600/80 text-white/80 hover:text-white backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-80 hover:!opacity-100 shadow border border-white/10" title="Mover Arriba">
+              <i data-lucide="chevron-up" class="w-6 h-6"></i>
+            </button>
+            <!-- HUD Down Arrow -->
+            <button onclick="triggerPtzAction('down')" class="hud-btn pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-emerald-600/80 text-white/80 hover:text-white backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-80 hover:!opacity-100 shadow border border-white/10" title="Mover Abajo">
+              <i data-lucide="chevron-down" class="w-6 h-6"></i>
+            </button>
+            <!-- HUD Left Arrow -->
+            <button onclick="triggerPtzAction('left')" class="hud-btn pointer-events-auto absolute top-1/2 left-4 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-emerald-600/80 text-white/80 hover:text-white backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-80 hover:!opacity-100 shadow border border-white/10" title="Mover Izquierda">
+              <i data-lucide="chevron-left" class="w-6 h-6"></i>
+            </button>
+            <!-- HUD Right Arrow -->
+            <button onclick="triggerPtzAction('right')" class="hud-btn pointer-events-auto absolute top-1/2 right-4 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-emerald-600/80 text-white/80 hover:text-white backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-80 hover:!opacity-100 shadow border border-white/10" title="Mover Derecha">
+              <i data-lucide="chevron-right" class="w-6 h-6"></i>
+            </button>
+            <!-- HUD Center Target -->
+            <button onclick="ptzReset()" class="hud-btn pointer-events-auto absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 hover:bg-cyan-600/80 text-white/70 hover:text-white backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-60 hover:!opacity-100 shadow border border-white/10" title="Centrar Cámara">
+              <i data-lucide="crosshair" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- Offline / Recovery Overlay (only triggered if camera is completely unreachable for > 15s) -->
+          <div id="offlineOverlay" class="hidden absolute inset-0 bg-zinc-950/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 z-30">
+            <i data-lucide="wifi-off" class="w-12 h-12 text-zinc-500 mb-3 animate-pulse"></i>
+            <h3 class="font-bold text-lg text-zinc-200">Reconectando a la cámara...</h3>
+            <p class="text-xs text-zinc-400 mt-1 max-w-xs">Verificando la conexión en la red local (192.168.1.13).</p>
+            <button onclick="reconnectCamera()" class="mt-4 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Reconectar Ahora</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Video Bottom Info Bar -->
+        <div class="px-4 py-2 bg-zinc-900 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+          <div class="flex items-center space-x-3">
+            <span>RTSP: <code class="text-zinc-300 font-mono">rtsp://admin:@<span class="cam-ip">192.168.1.13</span>:88/videoMain</code></span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span id="timestampNow" class="font-mono">--:--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PTZ Joystick & Directional Controls Card -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl">
+        
+        <!-- Card Header: Title & Dynamic Motion State -->
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-zinc-800">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="move" class="w-4 h-4 text-emerald-400"></i>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Control Motorizado PTZ (Giro / Inclinación)</h2>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span id="ptzStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60 flex items-center space-x-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500" id="ptzStatusDot"></span>
+              <span id="ptzStatusLabel">En reposo</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Controls Toolbar: Mode Selection & Step Precision -->
+        <div class="bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 mb-5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          
+          <!-- Mode Switcher -->
+          <div class="flex items-center space-x-1.5">
+            <span class="text-zinc-400 font-medium">Modo:</span>
+            <div class="flex bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+              <button 
+                id="modeStepBtn" 
+                onclick="setPtzMode('step')" 
+                class="px-2.5 py-1 rounded-md font-semibold bg-emerald-600 text-white shadow transition flex items-center space-x-1"
+                title="Recomendado: cada toque da un paso exacto y se frena solo"
+              >
+                <i data-lucide="target" class="w-3 h-3"></i>
+                <span>Paso a Paso</span>
+              </button>
+              <button 
+                id="modeContinuousBtn" 
+                onclick="setPtzMode('continuous')" 
+                class="px-2.5 py-1 rounded-md font-semibold text-zinc-400 hover:text-zinc-200 transition flex items-center space-x-1"
+                title="Mantén presionado para moverte de corrido"
+              >
+                <i data-lucide="play" class="w-3 h-3"></i>
+                <span>Continuo</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step Duration Selector (Only shown in Step Mode) -->
+          <div id="stepLengthControls" class="flex items-center space-x-1.5">
+            <span class="text-zinc-400 font-medium">Paso:</span>
+            <div class="flex bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+              <button onclick="setStepDuration(120, this)" class="step-dur-btn px-2 py-1 rounded-md font-medium text-zinc-400 hover:text-zinc-200 transition">
+                Fino
+              </button>
+              <button onclick="setStepDuration(250, this)" class="step-dur-btn px-2 py-1 rounded-md font-semibold bg-zinc-800 text-emerald-400 transition">
+                Normal
+              </button>
+              <button onclick="setStepDuration(500, this)" class="step-dur-btn px-2 py-1 rounded-md font-medium text-zinc-400 hover:text-zinc-200 transition">
+                Amplio
+              </button>
+            </div>
+          </div>
+
+          <!-- Speed Selector -->
+          <div class="flex items-center space-x-2">
+            <span class="text-zinc-400 font-medium">Velocidad:</span>
+            <select id="ptzSpeedSelect" onchange="changePtzSpeed(this.value)" class="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+              <option value="0">0 - Muy lenta</option>
+              <option value="1">1 - Lenta</option>
+              <option value="2" selected>2 - Media</option>
+              <option value="3">3 - Rápida</option>
+              <option value="4">4 - Máxima</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          
+          <!-- Directional Pad (D-PAD) -->
+          <div class="flex flex-col items-center">
+            <div class="grid grid-cols-3 gap-2 w-56 h-56 bg-zinc-950 p-3 rounded-3xl border border-zinc-800 shadow-inner select-none">
+              <!-- Up-Left -->
+              <button id="btn-upleft" onpointerdown="handlePtzPointerDown('upleft', event)" onpointerup="handlePtzPointerUp('upleft', event)" onpointercancel="handlePtzPointerUp('upleft', event)" class="ptz-btn flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded-xl" title="Diagonal Arriba-Izquierda">
+                <i data-lucide="arrow-up-left" class="w-5 h-5"></i>
+              </button>
+              
+              <!-- UP (Arriba) -->
+              <button id="btn-up" onpointerdown="handlePtzPointerDown('up', event)" onpointerup="handlePtzPointerUp('up', event)" onpointercancel="handlePtzPointerUp('up', event)" class="ptz-btn flex flex-col items-center justify-center bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-200 rounded-xl font-bold shadow-md" title="Mover Arriba (Flecha Arriba)">
+                <i data-lucide="arrow-up" class="w-6 h-6"></i>
+                <span class="text-[9px] uppercase font-bold tracking-wider mt-0.5">Arriba</span>
+              </button>
+              
+              <!-- Up-Right -->
+              <button id="btn-upright" onpointerdown="handlePtzPointerDown('upright', event)" onpointerup="handlePtzPointerUp('upright', event)" onpointercancel="handlePtzPointerUp('upright', event)" class="ptz-btn flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded-xl" title="Diagonal Arriba-Derecha">
+                <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+              </button>
+              
+              <!-- LEFT (Izquierda) -->
+              <button id="btn-left" onpointerdown="handlePtzPointerDown('left', event)" onpointerup="handlePtzPointerUp('left', event)" onpointercancel="handlePtzPointerUp('left', event)" class="ptz-btn flex flex-col items-center justify-center bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-200 rounded-xl font-bold shadow-md" title="Mover Izquierda (Flecha Izquierda)">
+                <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                <span class="text-[9px] uppercase font-bold tracking-wider mt-0.5">Izq</span>
+              </button>
+              
+              <!-- CENTER (STOP / RESET) -->
+              <button id="btn-center" onclick="handleCenterClick()" class="ptz-btn flex flex-col items-center justify-center bg-emerald-600/20 border-2 border-emerald-500/40 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl shadow-lg" title="Centrar Posición">
+                <i data-lucide="crosshair" class="w-6 h-6"></i>
+                <span class="text-[9px] uppercase font-black tracking-widest mt-0.5">Centro</span>
+              </button>
+              
+              <!-- RIGHT (Derecha) -->
+              <button id="btn-right" onpointerdown="handlePtzPointerDown('right', event)" onpointerup="handlePtzPointerUp('right', event)" onpointercancel="handlePtzPointerUp('right', event)" class="ptz-btn flex flex-col items-center justify-center bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-200 rounded-xl font-bold shadow-md" title="Mover Derecha (Flecha Derecha)">
+                <i data-lucide="arrow-right" class="w-6 h-6"></i>
+                <span class="text-[9px] uppercase font-bold tracking-wider mt-0.5">Der</span>
+              </button>
+              
+              <!-- Down-Left -->
+              <button id="btn-downleft" onpointerdown="handlePtzPointerDown('downleft', event)" onpointerup="handlePtzPointerUp('downleft', event)" onpointercancel="handlePtzPointerUp('downleft', event)" class="ptz-btn flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded-xl" title="Diagonal Abajo-Izquierda">
+                <i data-lucide="arrow-down-left" class="w-5 h-5"></i>
+              </button>
+              
+              <!-- DOWN (Abajo) -->
+              <button id="btn-down" onpointerdown="handlePtzPointerDown('down', event)" onpointerup="handlePtzPointerUp('down', event)" onpointercancel="handlePtzPointerUp('down', event)" class="ptz-btn flex flex-col items-center justify-center bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-200 rounded-xl font-bold shadow-md" title="Mover Abajo (Flecha Abajo)">
+                <i data-lucide="arrow-down" class="w-6 h-6"></i>
+                <span class="text-[9px] uppercase font-bold tracking-wider mt-0.5">Abajo</span>
+              </button>
+              
+              <!-- Down-Right -->
+              <button id="btn-downright" onpointerdown="handlePtzPointerDown('downright', event)" onpointerup="handlePtzPointerUp('downright', event)" onpointercancel="handlePtzPointerUp('downright', event)" class="ptz-btn flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded-xl" title="Diagonal Abajo-Derecha">
+                <i data-lucide="arrow-down-right" class="w-5 h-5"></i>
+              </button>
+            </div>
+
+            <!-- Emergency Stop Button below D-PAD -->
+            <button onclick="emergencyStop()" class="mt-3 w-56 py-1.5 bg-red-950/60 border border-red-800/60 hover:bg-red-800 text-red-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow">
+              <i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i>
+              <span>FRENAR MOTOR (Espacio)</span>
+            </button>
+          </div>
+
+          <!-- Quick Actions & Presets -->
+          <div class="flex flex-col space-y-3">
+            <span class="text-xs font-medium text-zinc-400">Patrullaje Automático (Cruise):</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="ptzCruise('horizontal')" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition">
+                <i data-lucide="repeat" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Giro Horizontal</span>
+              </button>
+              <button onclick="ptzCruise('vertical')" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition">
+                <i data-lucide="repeat" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Inclinación Vert.</span>
+              </button>
+            </div>
+            <button onclick="ptzCruise('stop')" class="w-full px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+              <span>Pausar Patrullaje</span>
+            </button>
+
+            <!-- Presets -->
+            <div class="pt-2 border-t border-zinc-800 flex flex-col space-y-2">
+              <span class="text-xs font-medium text-zinc-400">Posiciones Guardadas (Presets):</span>
+              <div class="flex space-x-2">
+                <select id="presetList" class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200">
+                  <option value="">Cargando presets...</option>
+                </select>
+                <button onclick="gotoPreset()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold transition">
+                  Ir
+                </button>
+              </div>
+              <div class="flex space-x-2">
+                <input type="text" id="newPresetName" placeholder="Nombre nuevo preset..." class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+                <button onclick="addPreset()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs transition" title="Guardar Posición Actual">
+                  <i data-lucide="bookmark-plus" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Keyboard shortcut guide helper -->
+            <div class="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-[11px] text-zinc-400 leading-tight">
+              <div class="flex items-center space-x-1 text-emerald-400 font-semibold mb-1">
+                <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
+                <span>Atajos Rápidos de Teclado</span>
+              </div>
+              <div>• Flechas <span class="text-zinc-200 font-mono">⬆️⬇️⬅️➡️</span> para mover la cámara.</div>
+              <div>• <span class="text-zinc-200 font-mono">Espacio</span> para detener de inmediato.</div>
+              <div>• Tecla <span class="text-zinc-200 font-mono">C</span> para volver al centro.</div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: Tabbed Control Panel (Cols 5 on lg) -->
+    <section class="lg:col-span-5 flex flex-col">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl flex-1 flex flex-col">
+        
+        <!-- Tabs Header -->
+        <div class="flex space-x-1 border-b border-zinc-800 pb-3 mb-4 overflow-x-auto">
+          <button onclick="switchTab('imagen')" id="tabBtn-imagen" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white flex items-center space-x-1.5 transition">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+            <span>Imagen</span>
+          </button>
+          <button onclick="switchTab('nocturna')" id="tabBtn-nocturna" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="moon" class="w-3.5 h-3.5"></i>
+            <span>Noche / IR</span>
+          </button>
+          <button onclick="switchTab('movimiento')" id="tabBtn-movimiento" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+            <span>Alarmas</span>
+          </button>
+          <button onclick="switchTab('wifi')" id="tabBtn-wifi" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+            <span>Wi-Fi</span>
+          </button>
+          <button onclick="switchTab('galeria')" id="tabBtn-galeria" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="image" class="w-3.5 h-3.5"></i>
+            <span>Fotos</span>
+          </button>
+          <button onclick="switchTab('intercom')" id="tabBtn-intercom" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="mic" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Intercom</span>
+          </button>
+          <button onclick="switchTab('drive')" id="tabBtn-drive" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="cloud" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span>Grabación / 5TB</span>
+          </button>
+          <button onclick="switchTab('sistema')" id="tabBtn-sistema" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+            <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+            <span>Sistema</span>
+          </button>
+        </div>
+
+        <!-- TAB 1: IMAGEN -->
+        <div id="tabContent-imagen" class="tab-content flex-1 flex flex-col space-y-4">
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Brillo</span>
+                <span id="brightnessVal" class="text-emerald-400 font-mono">50</span>
+              </div>
+              <input type="range" id="brightnessInput" min="0" max="100" value="50" oninput="updateImageParam('brightness', this.value)" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Contraste</span>
+                <span id="contrastVal" class="text-emerald-400 font-mono">50</span>
+              </div>
+              <input type="range" id="contrastInput" min="0" max="100" value="50" oninput="updateImageParam('contrast', this.value)" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Saturación</span>
+                <span id="saturationVal" class="text-emerald-400 font-mono">45</span>
+              </div>
+              <input type="range" id="saturationInput" min="0" max="100" value="45" oninput="updateImageParam('saturation', this.value)" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Nitidez</span>
+                <span id="sharpnessVal" class="text-emerald-400 font-mono">50</span>
+              </div>
+              <input type="range" id="sharpnessInput" min="0" max="100" value="50" oninput="updateImageParam('sharpness', this.value)" class="w-full accent-emerald-500">
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-zinc-800 grid grid-cols-2 gap-3">
+            <button onclick="toggleFlip()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="flip-vertical" class="w-3.5 h-3.5 text-zinc-300"></i>
+              <span>Invertir (Flip)</span>
+            </button>
+            <button onclick="toggleMirror()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="flip-horizontal" class="w-3.5 h-3.5 text-zinc-300"></i>
+              <span>Espejo (Mirror)</span>
+            </button>
+          </div>
+
+          <button onclick="resetImageSettings()" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 rounded-xl text-xs text-zinc-400 hover:text-zinc-200 transition">
+            Reestablecer Valores de Fábrica
+          </button>
+        </div>
+
+        <!-- TAB 2: VISION NOCTURNA / INFRARROJO -->
+        <div id="tabContent-nocturna" class="tab-content hidden flex-1 flex flex-col space-y-4">
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-semibold text-zinc-200">Modo de Infrarrojo (LEDs IR)</h4>
+                <p class="text-[11px] text-zinc-400 mt-0.5">Controla la visión nocturna.</p>
+              </div>
+              <select id="irModeSelect" onchange="setIrMode(this.value)" class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-200">
+                <option value="auto">Automático (Sensor de Luz)</option>
+                <option value="manual">Manual (Forzar ON/OFF)</option>
+              </select>
+            </div>
+
+            <div id="manualIrControls" class="pt-3 border-t border-zinc-800/80 flex space-x-2">
+              <button onclick="setIrState('on')" class="flex-1 py-2 bg-amber-600/20 border border-amber-600/40 hover:bg-amber-600 text-amber-200 hover:text-white rounded-lg text-xs font-medium transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="sun" class="w-3.5 h-3.5"></i>
+                <span>Encender Infrarrojos</span>
+              </button>
+              <button onclick="setIrState('off')" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-medium transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="moon" class="w-3.5 h-3.5"></i>
+                <span>Apagar Infrarrojos</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="text-[11px] text-zinc-500 leading-relaxed">
+            <span class="text-zinc-400 font-semibold">Nota:</span> En modo <span class="text-zinc-300">Automático</span>, la cámara encenderá los 11 LEDs infrarrojos y cambiará automáticamente al filtro de corte IR (filtro mecánico) cuando detecte oscuridad.
+          </div>
+        </div>
+
+        <!-- TAB 3: DETECCION DE MOVIMIENTO -->
+        <div id="tabContent-movimiento" class="tab-content hidden flex-1 flex flex-col space-y-4">
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-semibold text-zinc-200">Detección de Movimiento</h4>
+                <p class="text-[11px] text-zinc-400">Activa alarmas al detectar actividad en cuadro.</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="motionToggle" onchange="toggleMotion(this.checked)" class="sr-only peer">
+                <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Sensibilidad</span>
+                <span id="motionSensLabel" class="text-emerald-400 font-mono">Media (1)</span>
+              </div>
+              <input type="range" id="motionSensInput" min="0" max="4" value="1" onchange="applyMotionConfig()" class="w-full accent-emerald-500">
+              <div class="flex justify-between text-[10px] text-zinc-500 mt-1">
+                <span>Muy Baja</span>
+                <span>Baja</span>
+                <span>Media</span>
+                <span>Alta</span>
+                <span>Máxima</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-zinc-300">Intervalo entre disparos (segundos)</span>
+                <span id="motionIntervalLabel" class="text-emerald-400 font-mono">5s</span>
+              </div>
+              <input type="range" id="motionIntervalInput" min="5" max="60" step="5" value="5" onchange="applyMotionConfig()" class="w-full accent-emerald-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: WI-FI -->
+        <div id="tabContent-wifi" class="tab-content hidden flex-1 flex flex-col space-y-4">
+          <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">Red Conectada:</span>
+              <span class="font-semibold text-emerald-400 flex items-center space-x-1" id="currentWifiSSID">
+                <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+                <span>CASA DE LA LOCURA</span>
+              </span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">Nivel de Señal:</span>
+              <div class="flex items-center space-x-2">
+                <div class="w-24 bg-zinc-800 rounded-full h-2 overflow-hidden">
+                  <div id="wifiSignalBar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 90%;"></div>
+                </div>
+                <span class="font-mono font-bold text-emerald-400" id="wifiSignalDetail">--%</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">Calidad del Enlace:</span>
+              <span class="font-medium text-zinc-300" id="wifiQualityDetail">Excelente</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">IP Inalámbrica:</span>
+              <span class="font-mono text-zinc-200" id="currentWifiIP">192.168.1.13:88</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-zinc-300">Redes Cercanas Disponibles:</span>
+            <button onclick="scanWifi()" id="btnScanWifi" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-200 flex items-center space-x-1 transition">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+              <span>Escanear</span>
+            </button>
+          </div>
+
+          <div id="wifiListContainer" class="flex-1 overflow-y-auto max-h-48 space-y-1.5 pr-1">
+            <div class="text-center py-6 text-xs text-zinc-500">Presiona "Escanear" para buscar redes...</div>
+          </div>
+
+          <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+            <span class="text-xs font-medium text-zinc-400">Conectar a otra red Wi-Fi:</span>
+            <input type="text" id="wifiConnectSSID" placeholder="Nombre de red (SSID)" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+            <input type="password" id="wifiConnectPSK" placeholder="Contraseña de Wi-Fi" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+            <button onclick="connectWifi()" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition">
+              Guardar y Conectar
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 5: GALERIA DE FOTOS -->
+        <div id="tabContent-galeria" class="tab-content hidden flex-1 flex flex-col space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-zinc-300">Capturas Guardadas:</span>
+            <button onclick="loadGallery()" class="text-xs text-emerald-400 hover:underline flex items-center space-x-1">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+              <span>Actualizar</span>
+            </button>
+          </div>
+
+          <div id="galleryContainer" class="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+            <div class="col-span-2 text-center py-8 text-xs text-zinc-500">Cargando fotos...</div>
+          </div>
+        </div>
+
+        <!-- TAB 6: SISTEMA -->
+        <div id="tabContent-sistema" class="tab-content hidden flex-1 flex flex-col space-y-3">
+          <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2 text-xs">
+            <div class="flex justify-between"><span class="text-zinc-400">Modelo:</span><span class="font-semibold text-zinc-200" id="sysModel">FI9821W V2</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Firmware:</span><span class="font-mono text-zinc-200" id="sysFw">1.11.1.18</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Hardware:</span><span class="font-mono text-zinc-200" id="sysHw">1.4.1.8</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Dirección MAC:</span><span class="font-mono text-zinc-200" id="sysMac">00626E4EBBF1</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Red Wi-Fi:</span><span class="font-semibold text-emerald-400" id="sysWifiSsid">CASA DE LA LOCURA</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Señal Wi-Fi:</span><span class="font-mono font-bold text-emerald-400" id="sysWifiSignal">--%</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Puerto Streaming:</span><span class="font-mono text-zinc-200">88 (Media Port)</span></div>
+            <div class="flex justify-between"><span class="text-zinc-400">Puerto ONVIF:</span><span class="font-mono text-zinc-200">888</span></div>
+          </div>
+
+          <div class="space-y-2 pt-2">
+            <button onclick="reconnectCamera()" class="w-full py-2 bg-emerald-950/40 border border-emerald-800/40 hover:bg-emerald-900/60 text-emerald-300 rounded-xl text-xs font-medium flex items-center justify-center space-x-1.5 transition shadow">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-400"></i>
+              <span>Reconectar Transmisión y Cámara</span>
+            </button>
+
+            <button onclick="syncClock()" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-medium flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="clock" class="w-4 h-4 text-emerald-400"></i>
+              <span>Sincronizar Reloj con PC</span>
+            </button>
+
+            <button onclick="rebootCam()" class="w-full py-2 bg-red-950/40 border border-red-800/40 hover:bg-red-900/60 text-red-300 rounded-xl text-xs font-medium flex items-center justify-center space-x-1.5 transition">
+              <i data-lucide="power" class="w-4 h-4"></i>
+              <span>Reiniciar Cámara</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 7: INTERCOM / WALKIE-TALKIE -->
+        <div id="tabContent-intercom" class="tab-content hidden flex-1 flex flex-col space-y-4">
+          <!-- Main Push-to-Talk Panel -->
+          <div class="bg-zinc-950 p-5 rounded-2xl border border-zinc-800 flex flex-col items-center text-center shadow-inner relative overflow-hidden">
+            <div id="pttPulseRing" class="hidden absolute w-48 h-48 rounded-full bg-cyan-500/20 animate-ping pointer-events-none"></div>
+
+            <span class="text-xs font-bold text-zinc-300 uppercase tracking-widest mb-1 flex items-center space-x-1.5">
+              <i data-lucide="radio" class="w-4 h-4 text-cyan-400"></i>
+              <span>Modo Walkie-Talkie</span>
+            </span>
+            <p class="text-[11px] text-zinc-400 mb-5 max-w-xs">
+              Habla por el parlante físico de la cámara en vivo desde tu micrófono.
+            </p>
+
+            <!-- Large Push-to-Talk Interactive Circle -->
+            <div class="relative flex items-center justify-center my-2">
+              <button 
+                id="pttMainBtn"
+                class="w-32 h-32 rounded-full bg-gradient-to-b from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-extrabold shadow-xl shadow-cyan-600/30 flex flex-col items-center justify-center transition-all duration-150 border-4 border-cyan-300/40 select-none cursor-pointer active:scale-95 touch-none"
+              >
+                <i data-lucide="mic" id="pttIcon" class="w-10 h-10 mb-1 transition-transform"></i>
+                <span id="pttText" class="text-xs tracking-wider uppercase font-black">HABLAR</span>
+              </button>
+            </div>
+
+            <!-- Status Indicator Badge -->
+            <div class="mt-4 flex flex-col items-center space-y-2">
+              <div id="pttBadge" class="flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700/60 transition-colors">
+                <span class="w-2 h-2 rounded-full bg-zinc-500" id="pttDot"></span>
+                <span id="pttStatusLabel">Listo (Mantén presionado para hablar)</span>
+              </div>
+
+              <!-- Audio Waveform / VU Meter -->
+              <div class="w-52 h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                <div id="pttMeter" class="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 w-0 transition-all duration-75"></div>
+              </div>
+            </div>
+
+            <!-- Hands-Free Toggle Checkbox -->
+            <div class="mt-5 pt-3 border-t border-zinc-800/80 w-full flex items-center justify-center space-x-2 text-xs text-zinc-400">
+              <input type="checkbox" id="handsFreeCheck" onchange="toggleHandsFree(this.checked)" class="rounded bg-zinc-900 border-zinc-700 text-cyan-500 focus:ring-0 cursor-pointer">
+              <label for="handsFreeCheck" class="cursor-pointer select-none">Modo 1 Clic (Activar / Desactivar sin mantener)</label>
+            </div>
+          </div>
+
+          <!-- Sound Effects Board -->
+          <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-2.5">
+            <span class="text-xs font-semibold text-zinc-300 flex items-center space-x-1.5">
+              <i data-lucide="volume-2" class="w-4 h-4 text-emerald-400"></i>
+              <span>Efectos de Sonido Inmediatos (Sound Board)</span>
+            </span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button id="sfx-btn-chime" onclick="playSoundEffect('chime')" class="px-3 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 rounded-xl flex items-center space-x-2 text-zinc-200 transition active:scale-95 shadow">
+                <i data-lucide="bell" class="w-4 h-4 text-amber-400"></i>
+                <div class="text-left">
+                  <div class="font-semibold text-zinc-100">Timbre</div>
+                  <div class="text-[10px] text-zinc-400">Ding-Dong (Casa)</div>
+                </div>
+              </button>
+              <button id="sfx-btn-siren" onclick="playSoundEffect('siren')" class="px-3 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-500/50 rounded-xl flex items-center space-x-2 text-zinc-200 transition active:scale-95 shadow">
+                <i data-lucide="siren" class="w-4 h-4 text-red-400"></i>
+                <div class="text-left">
+                  <div class="font-semibold text-zinc-100">Sirena</div>
+                  <div class="text-[10px] text-zinc-400">Alarma Policial</div>
+                </div>
+              </button>
+              <button id="sfx-btn-alert" onclick="playSoundEffect('alert')" class="px-3 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-yellow-500/50 rounded-xl flex items-center space-x-2 text-zinc-200 transition active:scale-95 shadow">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-yellow-400"></i>
+                <div class="text-left">
+                  <div class="font-semibold text-zinc-100">Alerta</div>
+                  <div class="text-[10px] text-zinc-400">Triple Pitido</div>
+                </div>
+              </button>
+              <button id="sfx-btn-dog" onclick="playSoundEffect('dog')" class="px-3 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/50 rounded-xl flex items-center space-x-2 text-zinc-200 transition active:scale-95 shadow">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-emerald-400"></i>
+                <div class="text-left">
+                  <div class="font-semibold text-zinc-100">Ladrido</div>
+                  <div class="text-[10px] text-zinc-400">Disuasivo</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- In-Browser Voice Memo Recorder (WhatsApp Style) -->
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-200 font-semibold flex items-center space-x-1.5">
+                <i data-lucide="mic" class="w-4 h-4 text-cyan-400"></i>
+                <span>Grabar Nota de Voz</span>
+              </span>
+              <span class="text-[10px] text-zinc-500">Estilo WhatsApp</span>
+            </div>
+
+            <!-- State 1: Idle -->
+            <div id="voiceIdleState" class="flex flex-col items-center justify-center p-3 border border-dashed border-zinc-800 rounded-xl bg-zinc-900/50">
+              <p class="text-[11px] text-zinc-400 text-center mb-3">
+                Graba tu voz desde el navegador, escúchala y envíala al parlante.
+              </p>
+              <button onclick="startVoiceRecording()" class="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl font-bold flex items-center space-x-2 shadow-lg shadow-red-950/40 active:scale-95 transition">
+                <i data-lucide="mic" class="w-4 h-4"></i>
+                <span>Grabar Mensaje</span>
+              </button>
+            </div>
+
+            <!-- State 2: Recording -->
+            <div id="voiceRecordingState" class="hidden flex flex-col items-center justify-center p-4 border border-red-500/40 rounded-xl bg-red-950/20">
+              <div class="flex items-center space-x-3 mb-3">
+                <span class="w-3 h-3 rounded-full bg-red-500 animate-ping"></span>
+                <span class="font-mono text-base font-bold text-red-400" id="voiceRecordTimer">00:00</span>
+                <span class="text-[11px] text-zinc-400">/ 01:00</span>
+              </div>
+              <p class="text-[11px] text-zinc-400 mb-3">Habla claramente a tu micrófono...</p>
+              <button onclick="stopVoiceRecording()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl font-semibold flex items-center space-x-2 active:scale-95 transition shadow">
+                <i data-lucide="square" class="w-4 h-4 text-red-400 fill-red-400"></i>
+                <span>Detener y Escuchar</span>
+              </button>
+            </div>
+
+            <!-- State 3: Preview & Transmit -->
+            <div id="voicePreviewState" class="hidden flex flex-col space-y-2.5 p-3 border border-cyan-500/30 rounded-xl bg-cyan-950/10">
+              <span class="text-[11px] text-zinc-300 font-medium flex items-center space-x-1">
+                <i data-lucide="headphones" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Vista Previa del Audio Grabado:</span>
+              </span>
+              <audio id="voiceNotePlayer" controls class="w-full h-8 rounded-lg outline-none"></audio>
+              <div class="flex items-center space-x-2 pt-1">
+                <button id="voiceSendBtn" onclick="sendVoiceRecordingToCamera()" class="flex-1 py-2 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white rounded-xl font-bold flex items-center justify-center space-x-1.5 shadow active:scale-95 transition">
+                  <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                  <span>Enviar a la Cámara</span>
+                </button>
+                <button onclick="discardVoiceRecording()" class="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700/60 rounded-xl transition" title="Descartar y volver a grabar">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+              <div id="voiceSendStatus" class="text-[11px] text-zinc-400 hidden pt-1"></div>
+            </div>
+          </div>
+
+          <!-- Transmit Audio File (Upload Fallback) -->
+          <div class="p-3.5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2 text-xs">
+            <span class="text-zinc-300 font-semibold flex items-center space-x-1.5">
+              <i data-lucide="file-audio" class="w-4 h-4 text-cyan-400"></i>
+              <span>O sube un archivo de audio (.mp3, .wav, .m4a, .ogg)</span>
+            </span>
+            <div class="flex items-center space-x-2">
+              <input type="file" id="talkAudioFileInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac" class="text-xs text-zinc-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 flex-1 cursor-pointer">
+              <button onclick="uploadAndPlayAudioFile()" id="talkUploadBtn" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-semibold transition flex items-center space-x-1">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                <span>Emitir</span>
+              </button>
+            </div>
+            <div id="audioUploadStatus" class="text-[11px] text-zinc-400 hidden"></div>
+          </div>
+        </div>
+
+        <!-- TAB 8: GRABACIÓN CONTINUA & GOOGLE DRIVE (5 TB) -->
+        <div id="tabContent-drive" class="tab-content hidden flex-1 flex flex-col space-y-4">
+          
+          <!-- Card 1: Grabación Continua 24/7 -->
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3.5 text-xs shadow-inner">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-zinc-500" id="recLiveDot"></span>
+                <span class="font-bold text-zinc-200 text-sm" id="recStatusTitle">Grabación Continua</span>
+              </div>
+              <span id="recStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-zinc-800 text-zinc-400">
+                Pausada
+              </span>
+            </div>
+
+            <!-- Botón Maestro de Grabación -->
+            <button onclick="toggleContinuousRecording()" id="btnToggleRec" class="w-full py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center space-x-2 shadow-lg shadow-red-950/50 transition">
+              <i data-lucide="disc" id="btnToggleRecIcon" class="w-4 h-4"></i>
+              <span id="btnToggleRecText">Iniciar Grabación Continua 24/7</span>
+            </button>
+
+            <!-- Controles de Configuración de Grabación -->
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <label class="text-[11px] text-zinc-400 font-medium block mb-1">Calidad de Video:</label>
+                <select id="recStreamMode" onchange="updateRecordingSettings()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+                  <option value="main" selected>HD 720p (Nítido / 2 Mbps)</option>
+                  <option value="sub">VGA (Fluido / 0.5 Mbps)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] text-zinc-400 font-medium block mb-1">Duración por Segmento:</label>
+                <select id="recSegmentDuration" onchange="updateRecordingSettings()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500">
+                  <option value="300">5 minutos</option>
+                  <option value="900" selected>15 minutos (Recomendado)</option>
+                  <option value="1800">30 minutos</option>
+                  <option value="3600">1 hora</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 border-t border-zinc-800/80">
+              <label class="flex items-center space-x-2 text-zinc-300 cursor-pointer">
+                <input type="checkbox" id="recDeleteAfterUpload" onchange="updateRecordingSettings()" class="rounded bg-zinc-900 border-zinc-700 text-emerald-500 focus:ring-0">
+                <span class="text-[11px]">Borrar de PC tras subir a Google Drive (Ahorro de disco)</span>
+              </label>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="flex items-center justify-between text-[11px] text-zinc-400 bg-zinc-900/60 px-3 py-1.5 rounded-lg border border-zinc-800/60">
+              <span>Espacio en PC: <strong id="recLocalStorage" class="text-zinc-200 font-mono">0.0 GB</strong> (<span id="recLocalCount">0</span> archivos)</span>
+              <span>Subidas pendientes: <strong id="recPendingQueue" class="text-blue-400 font-mono">0</strong></span>
+            </div>
+          </div>
+
+          <!-- Card 2: Google Drive Cloud (5 TB) -->
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3.5 text-xs shadow-inner">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-200 font-bold flex items-center space-x-2 text-sm">
+                <i data-lucide="cloud" class="w-4 h-4 text-blue-400"></i>
+                <span>Google Drive (5 TB)</span>
+              </span>
+              <span id="gdriveStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-zinc-800 text-zinc-400">
+                No Configurado
+              </span>
+            </div>
+
+            <!-- Barra de Cuota de Google Drive -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-[11px]">
+                <span class="text-zinc-400">Almacenamiento en Google Drive:</span>
+                <span id="gdriveQuotaLabel" class="font-mono font-bold text-blue-400">0 GB / 5.000 GB (5 TB)</span>
+              </div>
+              <div class="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800">
+                <div id="gdriveQuotaBar" class="bg-gradient-to-r from-blue-500 to-cyan-400 h-2 rounded-full transition-all duration-500" style="width: 2%;"></div>
+              </div>
+            </div>
+
+            <!-- Datos de la Carpeta -->
+            <div class="flex items-center justify-between text-[11px] bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
+              <div class="space-y-0.5">
+                <div class="text-zinc-400">Carpeta de destino en Drive:</div>
+                <div class="font-semibold text-emerald-400 flex items-center space-x-1" id="gdriveFolderName">
+                  <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                  <span>Foscam_Grabaciones</span>
+                </div>
+              </div>
+              <button onclick="testGDriveConnection()" class="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-semibold flex items-center space-x-1 transition shadow">
+                <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                <span>Probar Conexión</span>
+              </button>
+            </div>
+
+            <!-- Configurar Credenciales en la App -->
+            <div class="space-y-2 pt-1 border-t border-zinc-800/80">
+              <span class="text-xs font-medium text-zinc-300 block">Configurar Credenciales de Google Drive:</span>
+              
+              <!-- Tabs de método: Subir Archivo vs Pegar JSON -->
+              <div class="grid grid-cols-2 gap-2">
+                <label class="flex flex-col items-center justify-center p-3 border-2 border-dashed border-zinc-800 hover:border-blue-500/50 rounded-xl bg-zinc-900/50 cursor-pointer transition text-center group">
+                  <i data-lucide="upload-cloud" class="w-5 h-5 text-zinc-400 group-hover:text-blue-400 mb-1 transition"></i>
+                  <span class="text-[11px] font-semibold text-zinc-300">Subir JSON</span>
+                  <span class="text-[9px] text-zinc-500">service_account.json</span>
+                  <input type="file" id="gdriveFileInput" accept=".json" onchange="uploadGDriveFile(this.files[0])" class="hidden">
+                </label>
+                
+                <button onclick="togglePasteJsonModal()" class="flex flex-col items-center justify-center p-3 border border-zinc-800 hover:border-zinc-700 rounded-xl bg-zinc-900/50 text-center transition">
+                  <i data-lucide="clipboard" class="w-5 h-5 text-zinc-400 mb-1"></i>
+                  <span class="text-[11px] font-semibold text-zinc-300">Pegar JSON</span>
+                  <span class="text-[9px] text-zinc-500">Desde portapapeles móvil</span>
+                </button>
+              </div>
+
+              <!-- Formulario colapsable para pegar JSON -->
+              <div id="pasteJsonSection" class="hidden space-y-2 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                <textarea id="pasteJsonText" rows="4" placeholder="Pega aquí el contenido de service_account.json o credentials.json..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-[10px] font-mono text-zinc-200 focus:outline-none focus:border-blue-500"></textarea>
+                <div class="flex space-x-2">
+                  <button onclick="savePastedJson()" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition">
+                    Guardar y Conectar
+                  </button>
+                  <button onclick="togglePasteJsonModal()" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-lg text-xs transition">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Guía desplegable de 2 minutos -->
+              <details class="bg-zinc-900/40 rounded-xl border border-zinc-800/80 p-2.5 text-[11px] text-zinc-400">
+                <summary class="font-semibold text-zinc-300 cursor-pointer flex items-center justify-between">
+                  <span>📖 ¿Cómo obtener las credenciales de Google gratis en 2 min?</span>
+                </summary>
+                <div class="mt-2.5 space-y-2 text-zinc-400 leading-relaxed border-t border-zinc-800 pt-2">
+                  <p>1. Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-blue-400 underline">console.cloud.google.com</a> y crea un proyecto gratuito.</p>
+                  <p>2. En <strong>APIs y servicios</strong>, busca y activa <strong>Google Drive API</strong>.</p>
+                  <p>3. En <strong>Credenciales</strong>, crea una <strong>Cuenta de servicio</strong> (Service Account) y descarga la clave en formato <strong>JSON</strong>.</p>
+                  <p>4. Abre tu Google Drive de 5 TB, crea una carpeta (ej. <em>Foscam_Grabaciones</em>) y compártela con el email de la cuenta de servicio como <strong>Editor</strong>.</p>
+                  <p>5. Sube o pega el archivo JSON aquí y el sistema grabará y subirá 24/7 de forma autónoma.</p>
+                </div>
+              </details>
+
+              <div class="flex space-x-2 pt-1">
+                <button onclick="syncGDriveNow()" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-blue-400"></i>
+                  <span>Subir Pendientes a Drive Ahora</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Lista de Grabaciones Recientes -->
+          <div class="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3 text-xs shadow-inner">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-200 font-bold flex items-center space-x-1.5 text-sm">
+                <i data-lucide="video" class="w-4 h-4 text-emerald-400"></i>
+                <span>Videos Grabados</span>
+              </span>
+              <button onclick="loadRecordingsList()" class="text-xs text-emerald-400 hover:underline flex items-center space-x-1">
+                <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                <span>Actualizar</span>
+              </button>
+            </div>
+
+            <!-- Contenedor scrollable de grabaciones -->
+            <div id="recordingsListContainer" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <div class="text-center py-6 text-xs text-zinc-500">Cargando grabaciones...</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Photo Lightbox Modal -->
+  <div id="photoModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative max-w-4xl w-full flex flex-col items-center">
+      <button onclick="closeModal()" class="absolute -top-10 right-0 text-white hover:text-zinc-300 p-2">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+      <img id="modalImg" src="" class="max-h-[80vh] w-auto rounded-xl object-contain shadow-2xl border border-zinc-800">
+      <div class="mt-3 flex space-x-3">
+        <a id="modalDownload" href="" download="" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium flex items-center space-x-1.5 transition">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Descargar Foto</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Player Modal -->
+  <div id="videoModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative max-w-4xl w-full flex flex-col items-center bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl">
+      <div class="flex items-center justify-between w-full pb-3 border-b border-zinc-800 mb-3">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="video" class="w-4 h-4 text-emerald-400"></i>
+          <span id="videoModalTitle" class="text-sm font-bold text-zinc-100 font-mono">rec_video.mp4</span>
+        </div>
+        <button onclick="closeVideoModal()" class="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <video id="videoModalPlayer" controls playsinline class="w-full max-h-[70vh] rounded-xl bg-black shadow-lg"></video>
+      <div class="mt-3 flex space-x-3 w-full justify-end">
+        <a id="videoModalDownload" href="" download="" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Descargar MP4</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA Install Modal (for Mobile & Desktop) -->
+  <div id="pwaModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow">
+            <i data-lucide="smartphone" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm text-zinc-100">Instalar App Móvil</h3>
+            <p class="text-[11px] text-zinc-400">Foscam Control Center</p>
+          </div>
+        </div>
+        <button onclick="closePwaModal()" class="text-zinc-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-zinc-300">
+        <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+          <span class="font-semibold text-emerald-400 flex items-center space-x-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Ventajas de instalar como App Móvil:</span>
+          </span>
+          <ul class="list-disc list-inside text-zinc-400 space-y-1 text-[11px]">
+            <li>Acceso directo desde la pantalla de inicio de tu celular.</li>
+            <li>Pantalla completa sin barra de navegación del navegador.</li>
+            <li>Rendimiento acelerado para video fluido a 60fps.</li>
+            <li>Funciona desde cualquier lugar por internet móvil (4G/5G).</li>
+          </ul>
+        </div>
+
+        <div id="pwaAndroidSection" class="space-y-2">
+          <button onclick="triggerPwaInstallPrompt()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center space-x-2 transition shadow">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Instalar Ahora en este Dispositivo</span>
+          </button>
+        </div>
+
+        <div id="pwaIosSection" class="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-1 text-[11px] text-zinc-400">
+          <span class="font-semibold text-zinc-200 block">📱 En iPhone / iPad (Safari):</span>
+          <p>1. Pulsa el botón <strong>Compartir</strong> (cuadrado con flecha hacia arriba).</p>
+          <p>2. Selecciona <strong>"Agregar a pantalla de inicio"</strong>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    // ==========================================
+    // PTZ CONTROL STATE & LOW-LATENCY ENGINE
+    // ==========================================
+    let ptzMode = 'step'; // 'step' (precise jog) or 'continuous'
+    let stepDurationMs = 250;
+    let isMovingContinuous = false;
+    let currentMovingDirection = null;
+    let activeKeysDown = new Set();
+    let consecutiveOfflineCount = 0;
+
+    function setPtzMode(mode) {
+      ptzMode = mode;
+      const stepBtn = document.getElementById('modeStepBtn');
+      const contBtn = document.getElementById('modeContinuousBtn');
+      const stepControls = document.getElementById('stepLengthControls');
+      
+      if (mode === 'step') {
+        stepBtn.className = 'px-2.5 py-1 rounded-md font-semibold bg-emerald-600 text-white shadow transition flex items-center space-x-1';
+        contBtn.className = 'px-2.5 py-1 rounded-md font-semibold text-zinc-400 hover:text-zinc-200 transition flex items-center space-x-1';
+        stepControls.classList.remove('hidden');
+      } else {
+        contBtn.className = 'px-2.5 py-1 rounded-md font-semibold bg-cyan-600 text-white shadow transition flex items-center space-x-1';
+        stepBtn.className = 'px-2.5 py-1 rounded-md font-semibold text-zinc-400 hover:text-zinc-200 transition flex items-center space-x-1';
+        stepControls.classList.add('hidden');
+      }
+    }
+
+    function setStepDuration(ms, elem) {
+      stepDurationMs = ms;
+      document.querySelectorAll('.step-dur-btn').forEach(btn => {
+        btn.className = 'step-dur-btn px-2 py-1 rounded-md font-medium text-zinc-400 hover:text-zinc-200 transition';
+      });
+      elem.className = 'step-dur-btn px-2 py-1 rounded-md font-semibold bg-zinc-800 text-emerald-400 transition';
+    }
+
+    function updatePtzVisualStatus(isMoving, direction = '') {
+      const badge = document.getElementById('ptzStatusBadge');
+      const dot = document.getElementById('ptzStatusDot');
+      const label = document.getElementById('ptzStatusLabel');
+      
+      if (isMoving) {
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1.5 shadow';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
+        const dirNames = {
+          up: 'Arriba', down: 'Abajo', left: 'Izquierda', right: 'Derecha',
+          upleft: 'Arriba-Izq', upright: 'Arriba-Der', downleft: 'Abajo-Izq', downright: 'Abajo-Der'
+        };
+        label.innerText = `Moviendo ${dirNames[direction] || direction}...`;
+      } else {
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60 flex items-center space-x-1';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-500';
+        label.innerText = 'En reposo';
+      }
+    }
+
+    // Direct trigger for steps or HUD
+    async function triggerPtzAction(direction) {
+      highlightPtzButton(direction, true);
+      updatePtzVisualStatus(true, direction);
+
+      try {
+        await fetch('/api/ptz/move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            direction,
+            mode: 'step',
+            duration: stepDurationMs
+          })
+        });
+      } catch (err) {
+        console.error('PTZ Move Error:', err);
+      } finally {
+        setTimeout(() => {
+          highlightPtzButton(direction, false);
+          updatePtzVisualStatus(false);
+        }, stepDurationMs + 80);
+      }
+    }
+
+    // Pointer events (works seamlessly on desktop mouse, laptop touchpad, and mobile touchscreen)
+    function handlePtzPointerDown(direction, event) {
+      if (event) event.preventDefault();
+      highlightPtzButton(direction, true);
+
+      if (ptzMode === 'step') {
+        triggerPtzAction(direction);
+      } else {
+        // Continuous mode
+        isMovingContinuous = true;
+        currentMovingDirection = direction;
+        updatePtzVisualStatus(true, direction);
+        fetch('/api/ptz/move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ direction, mode: 'continuous' })
+        });
+      }
+    }
+
+    function handlePtzPointerUp(direction, event) {
+      if (event) event.preventDefault();
+      highlightPtzButton(direction, false);
+
+      if (ptzMode === 'continuous' && isMovingContinuous) {
+        isMovingContinuous = false;
+        currentMovingDirection = null;
+        updatePtzVisualStatus(false);
+        fetch('/api/ptz/move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ direction: 'stop' })
+        });
+      }
+    }
+
+    function handleCenterClick() {
+      highlightPtzButton('center', true);
+      ptzReset();
+      setTimeout(() => highlightPtzButton('center', false), 350);
+    }
+
+    function emergencyStop() {
+      isMovingContinuous = false;
+      currentMovingDirection = null;
+      updatePtzVisualStatus(false);
+      fetch('/api/ptz/stop', { method: 'POST' });
+    }
+
+    function highlightPtzButton(dir, active) {
+      const btn = document.getElementById(`btn-${dir}`);
+      if (!btn) return;
+      if (active) {
+        btn.classList.add('ring-2', 'ring-emerald-400', 'bg-emerald-600/30', 'scale-95');
+      } else {
+        btn.classList.remove('ring-2', 'ring-emerald-400', 'bg-emerald-600/30', 'scale-95');
+      }
+    }
+
+    // Keyboard Arrow Controls
+    window.addEventListener('keydown', (e) => {
+      // Don't intercept if user is typing in an input
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      const keyMap = {
+        'ArrowUp': 'up',
+        'ArrowDown': 'down',
+        'ArrowLeft': 'left',
+        'ArrowRight': 'right',
+        'KeyW': 'up',
+        'KeyS': 'down',
+        'KeyA': 'left',
+        'KeyD': 'right'
+      };
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        emergencyStop();
+        return;
+      }
+
+      if (e.code === 'KeyC') {
+        e.preventDefault();
+        handleCenterClick();
+        return;
+      }
+
+      const dir = keyMap[e.code];
+      if (dir && !activeKeysDown.has(e.code)) {
+        e.preventDefault();
+        activeKeysDown.add(e.code);
+        handlePtzPointerDown(dir);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      const keyMap = {
+        'ArrowUp': 'up',
+        'ArrowDown': 'down',
+        'ArrowLeft': 'left',
+        'ArrowRight': 'right',
+        'KeyW': 'up',
+        'KeyS': 'down',
+        'KeyA': 'left',
+        'KeyD': 'right'
+      };
+
+      const dir = keyMap[e.code];
+      if (dir && activeKeysDown.has(e.code)) {
+        e.preventDefault();
+        activeKeysDown.delete(e.code);
+        handlePtzPointerUp(dir);
+      }
+    });
+
+    function ptzReset() {
+      fetch('/api/ptz/move', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ direction: 'center' })
+      });
+    }
+
+    function changePtzSpeed(speed) {
+      fetch('/api/ptz/speed', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ speed: parseInt(speed) })
+      });
+    }
+
+    function ptzCruise(type) {
+      fetch('/api/ptz/cruise', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ cruise_type: type })
+      });
+    }
+
+    // Presets
+    async function loadPresets() {
+      try {
+        const res = await fetch('/api/ptz/presets');
+        const data = await res.json();
+        const sel = document.getElementById('presetList');
+        sel.innerHTML = '';
+        if (data.presets && data.presets.length > 0) {
+          data.presets.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.innerText = p;
+            sel.appendChild(opt);
+          });
+        } else {
+          sel.innerHTML = '<option value="">Sin presets guardados</option>';
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function gotoPreset() {
+      const name = document.getElementById('presetList').value;
+      if (!name) return;
+      fetch('/api/ptz/preset/goto', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name })
+      });
+    }
+
+    async function addPreset() {
+      const input = document.getElementById('newPresetName');
+      const name = input.value.trim();
+      if (!name) return alert('Escribe un nombre para el preset');
+      await fetch('/api/ptz/preset/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name })
+      });
+      input.value = '';
+      loadPresets();
+    }
+
+    // ==========================================
+    // STREAM RESILIENCE & STATUS MANAGEMENT
+    // ==========================================
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        if (data.online) {
+          consecutiveOfflineCount = 0;
+          document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          document.getElementById('statusText').innerText = 'En Línea';
+          document.getElementById('camIpBadge').innerText = `Cámara: ${data.ip}:${data.port}`;
+          document.querySelectorAll('.cam-ip').forEach(el => el.innerText = data.ip);
+          document.getElementById('sysModel').innerText = data.model;
+          document.getElementById('sysFw').innerText = data.firmware;
+          document.getElementById('sysHw').innerText = data.hardware;
+          document.getElementById('sysMac').innerText = data.mac;
+          
+          document.getElementById('offlineOverlay').classList.add('hidden');
+          document.getElementById('streamWarningBanner').classList.add('hidden');
+
+          // Alarms check
+          if (data.state && data.state.motionDetectAlarm === '1') {
+            document.getElementById('motionBadge').classList.remove('hidden');
+          } else {
+            document.getElementById('motionBadge').classList.add('hidden');
+          }
+
+          // Wi-Fi signal & details update
+          if (data.wifi) {
+            updateWifiUI(data.wifi);
+          }
+        } else {
+          handleOfflineState();
+        }
+      } catch (e) {
+        handleOfflineState();
+      }
+    }
+
+    function handleOfflineState() {
+      consecutiveOfflineCount++;
+      // Only show full-screen overlay if unreachable for more than 3 polling cycles (24+ seconds)
+      if (consecutiveOfflineCount >= 3) {
+        document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('statusText').innerText = 'Desconectada';
+        document.getElementById('offlineOverlay').classList.remove('hidden');
+      }
+    }
+
+    function updateWifiUI(wifi) {
+      if (!wifi) return;
+      const signalText = document.getElementById('wifiSignalText');
+      const signalIcon = document.getElementById('wifiSignalIcon');
+      const wifiDetailSignal = document.getElementById('wifiSignalDetail');
+      const wifiSignalBar = document.getElementById('wifiSignalBar');
+      const wifiQualityDetail = document.getElementById('wifiQualityDetail');
+      const currentWifiSSID = document.getElementById('currentWifiSSID');
+      const sysWifiSsid = document.getElementById('sysWifiSsid');
+      const sysWifiSignal = document.getElementById('sysWifiSignal');
+
+      if (wifi.ssid && currentWifiSSID) {
+        currentWifiSSID.innerHTML = `<i data-lucide="wifi" class="w-3.5 h-3.5"></i><span>${wifi.ssid}</span>`;
+      }
+      if (wifi.ssid && sysWifiSsid) {
+        sysWifiSsid.innerText = wifi.ssid;
+      }
+
+      if (wifi.signal !== null && wifi.signal !== undefined) {
+        const sig = parseInt(wifi.signal, 10);
+        let colorClass = 'text-emerald-400';
+        let barColor = 'bg-emerald-500';
+        if (sig < 40) {
+          colorClass = 'text-red-400';
+          barColor = 'bg-red-500';
+        } else if (sig < 70) {
+          colorClass = 'text-amber-400';
+          barColor = 'bg-amber-500';
+        }
+
+        if (signalText) {
+          signalText.innerText = `${sig}%`;
+          signalText.className = `font-bold ${colorClass}`;
+        }
+        if (signalIcon) {
+          signalIcon.className = `w-3.5 h-3.5 ${colorClass}`;
+        }
+        if (wifiDetailSignal) {
+          wifiDetailSignal.innerText = `${sig}%`;
+          wifiDetailSignal.className = `font-mono font-bold ${colorClass}`;
+        }
+        if (wifiSignalBar) {
+          wifiSignalBar.style.width = `${Math.min(100, Math.max(5, sig))}%`;
+          wifiSignalBar.className = `${barColor} h-2 rounded-full transition-all duration-500`;
+        }
+        if (wifiQualityDetail) {
+          wifiQualityDetail.innerText = wifi.quality || (sig >= 70 ? 'Excelente' : (sig >= 40 ? 'Buena' : 'Débil'));
+        }
+        if (sysWifiSignal) {
+          sysWifiSignal.innerText = `${sig}% (${wifi.quality || 'Buena'})`;
+          sysWifiSignal.className = `font-mono font-bold ${colorClass}`;
+        }
+      } else {
+        if (signalText) signalText.innerText = '--%';
+        if (wifiDetailSignal) wifiDetailSignal.innerText = '--%';
+        if (sysWifiSignal) sysWifiSignal.innerText = '--';
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function refreshWifiSignal() {
+      try {
+        const res = await fetch('/api/wifi/signal');
+        if (res.ok) {
+          const wifi = await res.json();
+          updateWifiUI(wifi);
+        }
+      } catch (err) {
+        console.warn('Error al actualizar señal Wi-Fi:', err);
+      }
+    }
+
+    let isReconnecting = false;
+    async function reconnectCamera() {
+      if (isReconnecting) return;
+      isReconnecting = true;
+
+      const reconnectBtn = document.getElementById('reconnectBtn');
+      const reconnectIcon = document.getElementById('reconnectIcon');
+      const reconnectText = document.getElementById('reconnectText');
+      const streamWarningBanner = document.getElementById('streamWarningBanner');
+
+      if (reconnectBtn) reconnectBtn.disabled = true;
+      if (reconnectIcon) reconnectIcon.classList.add('animate-spin');
+      if (reconnectText) reconnectText.innerText = 'Reconectando...';
+
+      if (streamWarningBanner) {
+        streamWarningBanner.classList.remove('hidden');
+        const textSpan = streamWarningBanner.querySelector('span');
+        if (textSpan) textSpan.innerText = 'Reconectando cámara y transmisión RTSP...';
+      }
+
+      try {
+        const res = await fetch('/api/camera/reconnect', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.wifi) {
+          updateWifiUI(data.wifi);
+        }
+
+        // Restart video feed
+        reloadStream();
+
+        // Refresh camera status immediately
+        await loadStatus();
+
+        if (reconnectText) reconnectText.innerText = '¡Reconectado!';
+        setTimeout(() => {
+          if (reconnectText) reconnectText.innerText = 'Reconectar';
+          if (reconnectIcon) reconnectIcon.classList.remove('animate-spin');
+          if (reconnectBtn) reconnectBtn.disabled = false;
+          if (streamWarningBanner) streamWarningBanner.classList.add('hidden');
+          isReconnecting = false;
+        }, 1500);
+      } catch (err) {
+        console.error('Error al reconectar:', err);
+        if (reconnectText) reconnectText.innerText = 'Error';
+        setTimeout(() => {
+          if (reconnectText) reconnectText.innerText = 'Reconectar';
+          if (reconnectIcon) reconnectIcon.classList.remove('animate-spin');
+          if (reconnectBtn) reconnectBtn.disabled = false;
+          if (streamWarningBanner) streamWarningBanner.classList.add('hidden');
+          isReconnecting = false;
+        }, 2000);
+      }
+    }
+
+    // ========================================================
+    // HYBRID AUTO-RECOVERING REAL-TIME VIDEO STREAM ENGINE
+    // Mode 1: WebSocket /ws/stream (Zero Buffering, Sub-50ms)
+    // Mode 2: Instant Snapshot Poller fallback (/api/snapshot)
+    // ========================================================
+    let videoWs = null;
+    let videoCanvas = null;
+    let videoCtx = null;
+    let lastFrameTime = 0;
+    let isPollingStream = false;
+    let pollingInProgress = false;
+    let streamReconnectTimer = null;
+    let fpsCount = 0;
+    let lastFpsTime = Date.now();
+    let currentQuality = 'sub';
+
+    function initVideoElements() {
+      if (!videoCanvas) {
+        videoCanvas = document.getElementById('videoCanvas');
+        if (videoCanvas) {
+          videoCtx = videoCanvas.getContext('2d', { alpha: false });
+        }
+      }
+    }
+
+    async function renderFrameBlob(blob) {
+      initVideoElements();
+      lastFrameTime = Date.now();
+      fpsCount++;
+
+      // Mode 1: Hardware-accelerated Canvas with createImageBitmap
+      if (window.createImageBitmap && videoCanvas && videoCtx) {
+        try {
+          const bmp = await createImageBitmap(blob);
+          if (videoCanvas.width !== bmp.width || videoCanvas.height !== bmp.height) {
+            videoCanvas.width = bmp.width;
+            videoCanvas.height = bmp.height;
+          }
+          videoCtx.drawImage(bmp, 0, 0);
+          bmp.close();
+          if (videoCanvas.classList.contains('hidden')) {
+            videoCanvas.classList.remove('hidden');
+            document.getElementById('videoFeed').classList.add('hidden');
+          }
+          document.getElementById('streamWarningBanner').classList.add('hidden');
+          return;
+        } catch (err) {
+          // fallback to img tag below
+        }
+      }
+
+      // Mode 2: Double-buffered Img tag fallback
+      const feed = document.getElementById('videoFeed');
+      const url = URL.createObjectURL(blob);
+      feed.onload = () => {
+        if (feed._oldUrl) URL.revokeObjectURL(feed._oldUrl);
+        feed._oldUrl = url;
+      };
+      feed.src = url;
+      if (feed.classList.contains('hidden')) {
+        feed.classList.remove('hidden');
+        if (videoCanvas) videoCanvas.classList.add('hidden');
+      }
+      document.getElementById('streamWarningBanner').classList.add('hidden');
+    }
+
+    // Fetches the latest frame from memory instantly (< 50ms) on load or recovery
+    async function loadImmediateFrame() {
+      try {
+        const res = await fetch('/api/snapshot?_t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const blob = await res.blob();
+          renderFrameBlob(blob);
+        }
+      } catch (e) {}
+    }
+
+    function startWebSocketStream() {
+      initVideoElements();
+      if (videoWs) {
+        try { videoWs.close(); } catch (e) {}
+        videoWs = null;
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/stream`;
+
+      try {
+        videoWs = new WebSocket(wsUrl);
+        videoWs.binaryType = 'blob';
+
+        videoWs.onopen = () => {
+          isPollingStream = false;
+          document.getElementById('streamWarningBanner').classList.add('hidden');
+          document.getElementById('streamDelayBadge').innerText = '⚡ WebSocket En Vivo';
+        };
+
+        videoWs.onmessage = (e) => {
+          if (e.data instanceof Blob) {
+            renderFrameBlob(e.data);
+          }
+        };
+
+        videoWs.onerror = () => {
+          startFallbackPoller();
+        };
+
+        videoWs.onclose = () => {
+          videoWs = null;
+          startFallbackPoller();
+          if (streamReconnectTimer) clearTimeout(streamReconnectTimer);
+          streamReconnectTimer = setTimeout(() => {
+            startWebSocketStream();
+          }, 2000);
+        };
+      } catch (err) {
+        startFallbackPoller();
+      }
+    }
+
+    function startFallbackPoller() {
+      if (isPollingStream) return;
+      isPollingStream = true;
+      document.getElementById('streamDelayBadge').innerText = '🔄 Modo Ráfaga (Baja Latencia)';
+      triggerNextPoll();
+    }
+
+    async function triggerNextPoll() {
+      if (!isPollingStream) return;
+      if (pollingInProgress) return;
+      pollingInProgress = true;
+      try {
+        const res = await fetch('/api/snapshot?_t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const blob = await res.blob();
+          renderFrameBlob(blob);
+        }
+      } catch (e) {}
+      pollingInProgress = false;
+      if (isPollingStream) {
+        setTimeout(triggerNextPoll, 70); // ~14 fps fallback
+      }
+    }
+
+    function checkStreamHealth() {
+      const now = Date.now();
+      // Watchdog: If no frame received for 2.5 seconds, fetch instant snapshot & reconnect!
+      if (lastFrameTime > 0 && now - lastFrameTime > 2500) {
+        loadImmediateFrame();
+        if (!videoWs || videoWs.readyState !== WebSocket.OPEN) {
+          startWebSocketStream();
+        }
+      }
+      // FPS calculation & display
+      const elapsed = (now - lastFpsTime) / 1000;
+      if (elapsed >= 1.0) {
+        const fps = Math.round(fpsCount / elapsed);
+        fpsCount = 0;
+        lastFpsTime = now;
+        if (fps > 0) {
+          const modeLabel = (videoWs && videoWs.readyState === WebSocket.OPEN) ? '⚡ En Vivo' : '🔄 Ráfaga';
+          document.getElementById('streamDelayBadge').innerText = `${modeLabel} (${fps} FPS)`;
+        }
+      }
+    }
+
+    function reloadStream() {
+      loadImmediateFrame();
+      startWebSocketStream();
+      loadStatus();
+    }
+
+    async function toggleStreamQuality() {
+      currentQuality = currentQuality === 'sub' ? 'main' : 'sub';
+      const label = document.getElementById('qualityText');
+      label.innerText = currentQuality === 'sub' ? '⚡ Fluido (Rápido)' : '🎬 Modo HD (720p)';
+      await fetch('/api/stream/mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode: currentQuality })
+      });
+      loadImmediateFrame();
+    }
+
+    function toggleFullscreen() {
+      const elem = document.getElementById('videoContainer');
+      if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => alert(`Error: ${err.message}`));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    // Audio stream
+    let isAudioPlaying = false;
+    function toggleAudio() {
+      let audio = document.getElementById('liveAudio');
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'liveAudio';
+        document.body.appendChild(audio);
+      }
+      const btn = document.getElementById('audioBtn');
+      const icon = document.getElementById('audioIcon');
+      const text = document.getElementById('audioText');
+
+      if (!isAudioPlaying) {
+        audio.src = '/api/audio/stream?' + Date.now();
+        audio.play().then(() => {
+          isAudioPlaying = true;
+          btn.classList.add('text-emerald-400', 'border-emerald-500/50');
+          btn.classList.remove('text-zinc-300');
+          text.innerText = 'Escuchando';
+          icon.setAttribute('data-lucide', 'volume-2');
+          lucide.createIcons();
+        }).catch(err => {
+          console.error(err);
+          alert('Toca la pantalla para autorizar la reproducción de audio.');
+        });
+      } else {
+        audio.pause();
+        audio.src = '';
+        isAudioPlaying = false;
+        btn.classList.remove('text-emerald-400', 'border-emerald-500/50');
+        btn.classList.add('text-zinc-300');
+        text.innerText = 'Audio';
+        icon.setAttribute('data-lucide', 'volume-x');
+        lucide.createIcons();
+      }
+    }
+
+    // Snapshot & Gallery
+    async function takeSnapshot() {
+      try {
+        const res = await fetch('/api/snapshot/save', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          loadGallery();
+          const container = document.getElementById('videoContainer');
+          container.classList.add('ring-4', 'ring-emerald-500');
+          setTimeout(() => container.classList.remove('ring-4', 'ring-emerald-500'), 400);
+        }
+      } catch (e) {
+        alert('Error al guardar la captura');
+      }
+    }
+
+    async function loadGallery() {
+      try {
+        const res = await fetch('/api/gallery');
+        const items = await res.json();
+        const container = document.getElementById('galleryContainer');
+        container.innerHTML = '';
+        if (items.length === 0) {
+          container.innerHTML = '<div class="col-span-2 text-center py-8 text-xs text-zinc-500">No hay fotos guardadas aún.</div>';
+          return;
+        }
+        items.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'group relative rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 aspect-video';
+          div.innerHTML = `
+            <img src="${item.url}" class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition" onclick="openModal('${item.url}')" />
+            <div class="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-center text-[10px] text-zinc-300">
+              <span class="truncate">${item.time.split(' ')[1]}</span>
+              <button onclick="deletePhoto('${item.filename}')" class="text-red-400 hover:text-red-300 p-0.5" title="Borrar">
+                <i data-lucide="trash" class="w-3 h-3"></i>
+              </button>
+            </div>
+          `;
+          container.appendChild(div);
+        });
+        lucide.createIcons();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function openModal(url) {
+      document.getElementById('modalImg').src = url;
+      document.getElementById('modalDownload').href = url;
+      document.getElementById('photoModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('photoModal').classList.add('hidden');
+    }
+
+    async function deletePhoto(filename) {
+      if (!confirm('¿Eliminar esta foto?')) return;
+      await fetch(`/api/gallery/${filename}`, { method: 'DELETE' });
+      loadGallery();
+    }
+
+    // Image Settings
+    async function loadImageSettings() {
+      try {
+        const res = await fetch('/api/image');
+        const data = await res.json();
+        ['brightness', 'contrast', 'saturation', 'sharpness'].forEach(k => {
+          if (data[k] !== undefined) {
+            document.getElementById(`${k}Input`).value = data[k];
+            document.getElementById(`${k}Val`).innerText = data[k];
+          }
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    let debounceTimer;
+    function updateImageParam(key, val) {
+      document.getElementById(`${key}Val`).innerText = val;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const body = {};
+        body[key] = parseInt(val);
+        fetch('/api/image', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+        });
+      }, 250);
+    }
+
+    function toggleFlip() { fetch('/api/image/flip', { method: 'POST' }); }
+    function toggleMirror() { fetch('/api/image/mirror', { method: 'POST' }); }
+    function resetImageSettings() { fetch('/api/image/reset', { method: 'POST' }).then(() => loadImageSettings()); }
+
+    let nightVisionMode = 'on';
+
+    async function cycleNightVision() {
+      const btnText = document.getElementById('nightVisionText');
+      
+      if (nightVisionMode === 'on') {
+        nightVisionMode = 'auto';
+        if (btnText) btnText.innerText = '🤖 Auto';
+        await fetch('/api/led', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ mode: 'auto' })
+        });
+      } else if (nightVisionMode === 'auto') {
+        nightVisionMode = 'off';
+        if (btnText) btnText.innerText = '☀️ Día';
+        await fetch('/api/led', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ state: 'off' })
+        });
+      } else {
+        nightVisionMode = 'on';
+        if (btnText) btnText.innerText = '🌙 Noche';
+        await fetch('/api/led', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ state: 'on' })
+        });
+      }
+      setTimeout(loadImmediateFrame, 350);
+    }
+
+    function setIrMode(mode) {
+      fetch('/api/led', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode })
+      }).then(() => setTimeout(loadImmediateFrame, 350));
+    }
+
+    function setIrState(state) {
+      fetch('/api/led', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ state })
+      }).then(() => setTimeout(loadImmediateFrame, 350));
+    }
+
+    // Motion Detection
+    function toggleMotion(enabled) { applyMotionConfig(); }
+    function applyMotionConfig() {
+      const isEnable = document.getElementById('motionToggle').checked ? 1 : 0;
+      const sensitivity = parseInt(document.getElementById('motionSensInput').value);
+      const triggerInterval = parseInt(document.getElementById('motionIntervalInput').value);
+      
+      const labels = ['Muy Baja', 'Baja', 'Media', 'Alta', 'Máxima'];
+      document.getElementById('motionSensLabel').innerText = `${labels[sensitivity]} (${sensitivity})`;
+      document.getElementById('motionIntervalLabel').innerText = `${triggerInterval}s`;
+
+      fetch('/api/motion', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ isEnable, sensitivity, triggerInterval })
+      });
+    }
+
+    async function loadWifiConfig() {
+      try {
+        refreshWifiSignal();
+        const res = await fetch('/api/wifi/config');
+        const data = await res.json();
+        if (data.ssid) {
+          const el = document.getElementById('currentWifiSSID');
+          if (el) {
+            el.innerHTML = `<i data-lucide="wifi" class="w-3.5 h-3.5"></i><span>${data.ssid}</span>`;
+            if (window.lucide) lucide.createIcons();
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function scanWifi() {
+      const btn = document.getElementById('btnScanWifi');
+      btn.innerHTML = '<span class="animate-spin inline-block w-3 h-3 border-2 border-zinc-200 border-t-transparent rounded-full mr-1"></span> Escaneando...';
+      const container = document.getElementById('wifiListContainer');
+      container.innerHTML = '<div class="text-center py-6 text-xs text-zinc-400">Escaneando espectro Wi-Fi (esto toma ~10 seg)...</div>';
+      
+      try {
+        const res = await fetch('/api/wifi/scan');
+        const data = await res.json();
+        container.innerHTML = '';
+        if (data.networks && data.networks.length > 0) {
+          data.networks.forEach(net => {
+            const div = document.createElement('div');
+            div.className = 'p-2 bg-zinc-900 hover:bg-zinc-800 rounded-lg border border-zinc-800/80 flex items-center justify-between cursor-pointer transition';
+            div.onclick = () => {
+              document.getElementById('wifiConnectSSID').value = net.ssid;
+              document.getElementById('wifiConnectPSK').focus();
+            };
+            div.innerHTML = `
+              <div class="flex items-center space-x-2 truncate">
+                <i data-lucide="wifi" class="w-3.5 h-3.5 ${net.signal > 60 ? 'text-emerald-400' : 'text-amber-400'}"></i>
+                <span class="text-xs font-medium text-zinc-200 truncate">${net.ssid}</span>
+              </div>
+              <div class="flex items-center space-x-2 text-xs text-zinc-400">
+                <span>${net.signal}%</span>
+                ${net.encrypted ? '<i data-lucide="lock" class="w-3 h-3 text-zinc-500"></i>' : ''}
+              </div>
+            `;
+            container.appendChild(div);
+          });
+          lucide.createIcons();
+        } else {
+          container.innerHTML = '<div class="text-center py-6 text-xs text-zinc-500">No se encontraron redes adicionales.</div>';
+        }
+      } catch (e) {
+        container.innerHTML = '<div class="text-center py-6 text-xs text-red-400">Error al escanear redes Wi-Fi.</div>';
+      } finally {
+        btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3 h-3"></i><span>Escanear</span>';
+        lucide.createIcons();
+      }
+    }
+
+    async function connectWifi() {
+      const ssid = document.getElementById('wifiConnectSSID').value.trim();
+      const psk = document.getElementById('wifiConnectPSK').value.trim();
+      if (!ssid) return alert('Ingresa el nombre de la red SSID');
+      if (!confirm(`¿Conectar la cámara a "${ssid}"? La cámara se reiniciará para conectarse.`)) return;
+      
+      await fetch('/api/wifi/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ssid, psk })
+      });
+      alert('Configuración Wi-Fi guardada. La cámara se reconectará.');
+    }
+
+    // System
+    async function syncClock() {
+      const res = await fetch('/api/system/sync_time', { method: 'POST' });
+      const data = await res.json();
+      if (data.result && data.result.result === '0') {
+        alert('¡Hora de la cámara sincronizada exitosamente con tu PC!');
+      } else {
+        alert('Error al sincronizar la hora.');
+      }
+    }
+
+    function rebootCam() {
+      if (!confirm('¿Estás seguro de que deseas reiniciar la cámara?')) return;
+      fetch('/api/system/reboot', { method: 'POST' });
+      alert('Orden de reinicio enviada. Espera 60 segundos.');
+    }
+
+    // ==========================================
+    // WALKIE-TALKIE / TWO-WAY AUDIO CLIENT
+    // ==========================================
+    let isHandsFree = false;
+    let isTalking = false;
+    let talkWs = null;
+    let talkAudioCtx = null;
+    let talkMicStream = null;
+    let talkProcessor = null;
+
+    function toggleHandsFree(checked) {
+      isHandsFree = checked;
+      const label = document.getElementById('pttStatusLabel');
+      if (isTalking) stopTalk();
+      label.innerText = isHandsFree ? 'Modo 1 Clic (Toca para activar/desactivar)' : 'Listo (Mantén presionado para hablar)';
+    }
+
+    // --- PTT robusto: mic persistente, AudioContext creado en el gesto del usuario, sin condiciones de carrera ---
+    let pttToken = 0;          // invalida sesiones viejas si se suelta antes de terminar de conectar
+    let talkQueue = [];        // audio capturado mientras abre el WebSocket
+
+    function pttSetUI(state, msg) {
+      const btn = document.getElementById('pttMainBtn');
+      const text = document.getElementById('pttText');
+      const dot = document.getElementById('pttDot');
+      const label = document.getElementById('pttStatusLabel');
+      const ring = document.getElementById('pttPulseRing');
+      const meter = document.getElementById('pttMeter');
+      const live = state === 'live' || state === 'connecting';
+      btn.classList.toggle('from-red-600', live);
+      btn.classList.toggle('to-rose-700', live);
+      btn.classList.toggle('border-red-400', live);
+      btn.classList.toggle('scale-95', live);
+      btn.classList.toggle('from-cyan-500', !live);
+      btn.classList.toggle('to-blue-600', !live);
+      btn.classList.toggle('border-cyan-300/40', !live);
+      text.innerText = state === 'live' ? 'TRANSMITIENDO' : state === 'connecting' ? 'CONECTANDO...' : 'HABLAR';
+      dot.classList.toggle('bg-red-500', live);
+      dot.classList.toggle('animate-ping', live);
+      dot.classList.toggle('bg-zinc-500', !live);
+      ring.classList.toggle('hidden', state !== 'live');
+      if (!live) meter.style.width = '0%';
+      label.innerText = msg || (isHandsFree ? 'Modo 1 Clic (Toca para hablar)' : 'Listo (Mantén presionado para hablar)');
+    }
+
+    async function ensureMic() {
+      if (talkMicStream && talkMicStream.getAudioTracks().some(t => t.readyState === 'live')) return talkMicStream;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('El navegador bloquea el micrófono en páginas http. Usa el enlace https (túnel) o http://localhost:8000');
+      }
+      talkMicStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      return talkMicStream;
+    }
+
+    async function startTalk() {
+      if (isTalking) return;
+      isTalking = true;
+      const token = ++pttToken;
+      pttSetUI('connecting', 'Conectando micrófono y parlante...');
+
+      // El AudioContext se crea DENTRO del gesto del usuario (requisito de Safari/Chrome móvil)
+      const AC = window.AudioContext || window.webkitAudioContext;
+      talkAudioCtx = new AC();
+      try { await talkAudioCtx.resume(); } catch (e) {}
+
+      let stream;
+      try {
+        stream = await ensureMic();
+      } catch (err) {
+        console.error('Micrófono:', err);
+        if (token === pttToken) { pttSetUI('idle', '⚠️ ' + (err.message || 'Sin acceso al micrófono')); abortTalk(); }
+        return;
+      }
+      if (token !== pttToken) return; // se soltó el botón mientras se pedía permiso
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/talk`);
+      ws.binaryType = 'arraybuffer';
+      talkWs = ws;
+      talkQueue = [];
+      let wsReady = false;
+
+      const ctx = talkAudioCtx;
+      const source = ctx.createMediaStreamSource(stream);
+      const rate = ctx.sampleRate;
+      talkProcessor = ctx.createScriptProcessor(2048, 1, 1);
+      talkProcessor.onaudioprocess = (e) => {
+        if (token !== pttToken) return;
+        const input = e.inputBuffer.getChannelData(0);
+        let sum = 0;
+        for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+        document.getElementById('pttMeter').style.width = Math.min(100, Math.round(Math.sqrt(sum / input.length) * 400)) + '%';
+
+        // Downsample con promedio simple a 8 kHz
+        const ratio = rate / 8000;
+        const n = Math.floor(input.length / ratio);
+        const out = new Int16Array(n);
+        for (let i = 0; i < n; i++) {
+          const a = Math.floor(i * ratio), b = Math.min(input.length, Math.floor((i + 1) * ratio));
+          let s = 0;
+          for (let j = a; j < b; j++) s += input[j];
+          let avg = s / Math.max(1, b - a);
+          // Apply 2.5x digital gain in browser so voice is strong and clear
+          let boosted = Math.max(-1.0, Math.min(1.0, avg * 2.5));
+          out[i] = boosted < 0 ? boosted * 0x8000 : boosted * 0x7FFF;
+        }
+        if (wsReady && ws.readyState === WebSocket.OPEN) ws.send(out.buffer);
+        else if (talkQueue.length < 40) talkQueue.push(out.buffer);
+      };
+      // Connect through a mute sink node to destination so onaudioprocess fires without local speaker feedback
+      const muteSink = ctx.createGain();
+      muteSink.gain.value = 0.0;
+      source.connect(talkProcessor);
+      talkProcessor.connect(muteSink);
+      muteSink.connect(ctx.destination);
+      talkProcessor._source = source;
+      talkProcessor._muteSink = muteSink;
+
+      ws.onmessage = (ev) => {
+        if (typeof ev.data !== 'string') return;
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.error) { pttSetUI('idle', '⚠️ ' + msg.error); abortTalk(); return; }
+          if (msg.status === 'connected' && token === pttToken) {
+            wsReady = true;
+            talkQueue.forEach(b => ws.send(b));
+            talkQueue = [];
+            pttSetUI('live', '🔴 Transmitiendo al parlante de la cámara...');
+          }
+        } catch (e) {}
+      };
+      ws.onerror = () => { if (token === pttToken) pttSetUI('idle', '⚠️ No se pudo conectar con el servidor'); };
+      ws.onclose = () => { if (token === pttToken && isTalking) abortTalk(); };
+    }
+
+    function abortTalk() {
+      pttToken++;
+      isTalking = false;
+      if (talkWs) {
+        const ws = talkWs; talkWs = null;
+        try { if (ws.readyState === WebSocket.OPEN) ws.send('stop'); } catch (e) {}
+        setTimeout(() => {
+          try { ws.close(); } catch (e) {}
+        }, 300);
+      }
+      if (talkProcessor) {
+        try { talkProcessor.onaudioprocess = null; talkProcessor.disconnect(); } catch (e) {}
+        try { talkProcessor._source && talkProcessor._source.disconnect(); } catch (e) {}
+        try { talkProcessor._muteSink && talkProcessor._muteSink.disconnect(); } catch (e) {}
+        talkProcessor = null;
+      }
+      setTimeout(() => {
+        if (talkAudioCtx && !isTalking) {
+          try { talkAudioCtx.close(); } catch (e) {}
+          talkAudioCtx = null;
+        }
+      }, 350);
+      talkQueue = [];
+    }
+
+    function stopTalk() {
+      const wasTalking = isTalking;
+      abortTalk();
+      if (wasTalking) pttSetUI('idle');
+    }
+
+    function setupPttEvents() {
+      const btn = document.getElementById('pttMainBtn');
+      if (!btn) return;
+      let holding = false;
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+        if (isHandsFree) {
+          if (isTalking) stopTalk(); else startTalk();
+        } else {
+          holding = true;
+          startTalk();
+        }
+      });
+      const release = (e) => {
+        e.preventDefault();
+        if (!isHandsFree && holding) { holding = false; stopTalk(); }
+      };
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointercancel', release);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
+    async function playSoundEffect(name) {
+      const label = document.getElementById('pttStatusLabel');
+      const originalText = label.innerText;
+      label.innerText = `🔊 Reproduciendo ${name.toUpperCase()} en parlante...`;
+
+      const btn = document.getElementById(`sfx-btn-${name}`);
+      if (btn) {
+        btn.classList.add('ring-2', 'ring-red-500', 'scale-95');
+        setTimeout(() => btn.classList.remove('ring-2', 'ring-red-500', 'scale-95'), 3200);
+      }
+
+      try {
+        const res = await fetch('/api/audio/play_sound', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ sound: name })
+        });
+        const data = await res.json();
+        if (data.status === 'playing') {
+          setTimeout(() => { label.innerText = originalText; }, 3200);
+        } else {
+          label.innerText = '⚠️ Error en reproducción';
+          setTimeout(() => { label.innerText = originalText; }, 2500);
+        }
+      } catch (err) {
+        alert('Error reproduciendo sonido: ' + err.message);
+        label.innerText = originalText;
+      }
+    }
+
+    // --- Grabador de Notas de Voz en Navegador (Estilo WhatsApp) ---
+    let voiceMediaRecorder = null;
+    let voiceRecordedChunks = [];
+    let voiceRecordTimerInterval = null;
+    let voiceRecordStartTime = 0;
+    let voiceRecordedBlob = null;
+
+    async function startVoiceRecording() {
+      voiceRecordedChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+        });
+
+        let mimeType = 'audio/webm; codecs=opus';
+        if (typeof MediaRecorder.isTypeSupported === 'function') {
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+            else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+            else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+            else mimeType = '';
+          }
+        } else {
+          mimeType = '';
+        }
+
+        const options = mimeType ? { mimeType } : {};
+        voiceMediaRecorder = new MediaRecorder(stream, options);
+
+        voiceMediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            voiceRecordedChunks.push(e.data);
+          }
+        };
+
+        voiceMediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blobType = voiceMediaRecorder.mimeType || 'audio/webm';
+          voiceRecordedBlob = new Blob(voiceRecordedChunks, { type: blobType });
+          const audioUrl = URL.createObjectURL(voiceRecordedBlob);
+
+          const player = document.getElementById('voiceNotePlayer');
+          player.src = audioUrl;
+
+          document.getElementById('voiceRecordingState').classList.add('hidden');
+          document.getElementById('voicePreviewState').classList.remove('hidden');
+          if (voiceRecordTimerInterval) clearInterval(voiceRecordTimerInterval);
+        };
+
+        voiceMediaRecorder.start(100);
+        voiceRecordStartTime = Date.now();
+
+        document.getElementById('voiceIdleState').classList.add('hidden');
+        document.getElementById('voicePreviewState').classList.add('hidden');
+        document.getElementById('voiceRecordingState').classList.remove('hidden');
+
+        voiceRecordTimerInterval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - voiceRecordStartTime) / 1000);
+          const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+          const secs = String(elapsed % 60).padStart(2, '0');
+          document.getElementById('voiceRecordTimer').innerText = `${mins}:${secs}`;
+          if (elapsed >= 60) {
+            stopVoiceRecording();
+          }
+        }, 250);
+
+      } catch (err) {
+        alert('No se pudo acceder al micrófono para grabar: ' + (err.message || err));
+      }
+    }
+
+    function stopVoiceRecording() {
+      if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+        voiceMediaRecorder.stop();
+      }
+    }
+
+    function discardVoiceRecording() {
+      voiceRecordedBlob = null;
+      const player = document.getElementById('voiceNotePlayer');
+      player.pause();
+      player.src = '';
+      document.getElementById('voicePreviewState').classList.add('hidden');
+      document.getElementById('voiceRecordingState').classList.add('hidden');
+      document.getElementById('voiceIdleState').classList.remove('hidden');
+      document.getElementById('voiceSendStatus').classList.add('hidden');
+    }
+
+    async function sendVoiceRecordingToCamera() {
+      if (!voiceRecordedBlob) return;
+      const statusDiv = document.getElementById('voiceSendStatus');
+      const sendBtn = document.getElementById('voiceSendBtn');
+
+      statusDiv.classList.remove('hidden');
+      statusDiv.innerHTML = '<span class="text-cyan-400 font-semibold flex items-center space-x-1.5"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i><span>Transmitiendo al parlante de la cámara...</span></span>';
+      if (window.lucide) lucide.createIcons();
+      sendBtn.disabled = true;
+
+      const formData = new FormData();
+      const ext = voiceRecordedBlob.type.includes('mp4') ? 'm4a' : 'webm';
+      formData.append('file', voiceRecordedBlob, `nota_voz.${ext}`);
+
+      try {
+        const res = await fetch('/api/audio/upload_and_play', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.status === 'playing') {
+          statusDiv.innerHTML = '<span class="text-emerald-400 font-bold flex items-center space-x-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i><span>¡Mensaje emitido exitosamente por el parlante!</span></span>';
+        } else {
+          statusDiv.innerHTML = '<span class="text-red-400">⚠️ Error al reproducir audio en la cámara.</span>';
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `<span class="text-red-400">⚠️ Error: ${err.message}</span>`;
+      } finally {
+        sendBtn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+        }, 6000);
+      }
+    }
+
+    async function uploadAndPlayAudioFile() {
+      const fileInput = document.getElementById('talkAudioFileInput');
+      const statusDiv = document.getElementById('audioUploadStatus');
+      const btn = document.getElementById('talkUploadBtn');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Selecciona un archivo de audio primero (.mp3, .wav, .m4a, etc.)');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      statusDiv.classList.remove('hidden');
+      statusDiv.innerHTML = '<span class="text-cyan-400 font-semibold flex items-center space-x-1.5"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i><span>Transcodificando y transmitiendo al parlante...</span></span>';
+      if (window.lucide) lucide.createIcons();
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/audio/upload_and_play', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.status === 'playing') {
+          statusDiv.innerHTML = '<span class="text-emerald-400 font-bold">¡Audio reproduciéndose en el parlante!</span>';
+        } else {
+          statusDiv.innerHTML = '<span class="text-red-400">Error al reproducir audio.</span>';
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `<span class="text-red-400">Error: ${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => statusDiv.classList.add('hidden'), 5000);
+      }
+    }
+
+    // ========================================================
+    // CONTINUOUS RECORDING & GOOGLE DRIVE (5 TB) CONTROLLER
+    // ========================================================
+    let isRecordingActive = false;
+
+    async function loadDriveAndRecordingStatus() {
+      try {
+        const res = await fetch('/api/recording/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // 1. Estado de Grabación
+        isRecordingActive = data.is_recording;
+        const liveDot = document.getElementById('recLiveDot');
+        const badge = document.getElementById('recStatusBadge');
+        const btn = document.getElementById('btnToggleRec');
+        const btnText = document.getElementById('btnToggleRecText');
+        const modeSelect = document.getElementById('recStreamMode');
+        const durSelect = document.getElementById('recSegmentDuration');
+        const delCheck = document.getElementById('recDeleteAfterUpload');
+        const localSpace = document.getElementById('recLocalStorage');
+        const localCount = document.getElementById('recLocalCount');
+        const pendingQueue = document.getElementById('recPendingQueue');
+
+        if (modeSelect) modeSelect.value = data.stream_mode || 'main';
+        if (durSelect) durSelect.value = String(data.segment_duration || 900);
+        if (delCheck) delCheck.checked = !!data.delete_after_upload;
+        if (localSpace) localSpace.innerText = `${data.local_storage_gb || 0} GB`;
+        if (localCount) localCount.innerText = data.local_recordings_count || 0;
+        if (pendingQueue) pendingQueue.innerText = data.pending_uploads || 0;
+
+        if (isRecordingActive) {
+          if (liveDot) liveDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-ping';
+          if (badge) {
+            badge.innerText = data.current_file ? `Grabando: ${data.current_file}` : 'Grabando Activamente';
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-950/80 text-red-300 border border-red-800/60 animate-pulse';
+          }
+          if (btn) {
+            btn.className = 'w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl font-bold flex items-center justify-center space-x-2 transition shadow';
+          }
+          if (btnText) btnText.innerText = 'Pausar Grabación Continua';
+        } else {
+          if (liveDot) liveDot.className = 'w-2.5 h-2.5 rounded-full bg-zinc-500';
+          if (badge) {
+            badge.innerText = 'Pausada';
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-zinc-800 text-zinc-400';
+          }
+          if (btn) {
+            btn.className = 'w-full py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center space-x-2 shadow-lg shadow-red-950/50 transition';
+          }
+          if (btnText) btnText.innerText = 'Iniciar Grabación Continua 24/7';
+        }
+
+        // 2. Estado de Google Drive
+        const gd = data.gdrive || {};
+        const gdriveBadge = document.getElementById('gdriveStatusBadge');
+        const gdriveQuotaLabel = document.getElementById('gdriveQuotaLabel');
+        const gdriveQuotaBar = document.getElementById('gdriveQuotaBar');
+        const gdriveFolderName = document.getElementById('gdriveFolderName');
+
+        if (gd.connected) {
+          if (gdriveBadge) {
+            gdriveBadge.innerText = `Conectado: ${gd.email || 'Cuenta Activa'}`;
+            gdriveBadge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60';
+          }
+          if (gdriveQuotaLabel) {
+            gdriveQuotaLabel.innerText = `${gd.quota_used_gb || 0} GB / ${gd.quota_total_gb || 5120} GB (${gd.quota_percentage || 0}%)`;
+          }
+          if (gdriveQuotaBar) {
+            gdriveQuotaBar.style.width = `${Math.min(100, Math.max(2, gd.quota_percentage || 1))}%`;
+          }
+          if (gdriveFolderName && gd.folder_name) {
+            gdriveFolderName.innerHTML = `<i data-lucide="folder" class="w-3.5 h-3.5"></i><span>${gd.folder_name}</span>`;
+          }
+        } else {
+          if (gdriveBadge) {
+            gdriveBadge.innerText = 'Sin Credenciales';
+            gdriveBadge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/60';
+          }
+          if (gdriveQuotaLabel) {
+            gdriveQuotaLabel.innerText = 'Conecta tu cuenta para ver tus 5 TB';
+          }
+        }
+
+        if (window.lucide) lucide.createIcons();
+      } catch (err) {
+        console.warn('Error cargando estado de grabación/drive:', err);
+      }
+    }
+
+    async function toggleContinuousRecording() {
+      const btn = document.getElementById('btnToggleRec');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/recording/toggle', { method: 'POST' });
+        const data = await res.json();
+        await loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error al alternar grabación: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function updateRecordingSettings() {
+      const stream_mode = document.getElementById('recStreamMode').value;
+      const segment_duration = parseInt(document.getElementById('recSegmentDuration').value, 10);
+      const delete_after_upload = document.getElementById('recDeleteAfterUpload').checked;
+
+      await fetch('/api/recording/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream_mode, segment_duration, delete_after_upload })
+      });
+      loadDriveAndRecordingStatus();
+    }
+
+    async function testGDriveConnection() {
+      try {
+        const res = await fetch('/api/gdrive/status');
+        const data = await res.json();
+        if (data.connected) {
+          alert(`¡Conexión Exitosa con Google Drive!\nCuenta: ${data.email}\nEspacio: ${data.quota_used_gb} GB usados de ${data.quota_total_gb} GB`);
+        } else {
+          alert(`Google Drive no conectado: ${data.message || data.error || 'Verifica las credenciales'}`);
+        }
+        loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error al probar conexión: ' + err.message);
+      }
+    }
+
+    async function uploadGDriveFile(file) {
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/gdrive/upload_credentials', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.test && data.test.connected) {
+          alert('¡Credenciales de Google Drive instaladas y validadas con éxito!');
+        } else {
+          alert('Archivo guardado. Estado: ' + (data.test.message || 'Sin conexión'));
+        }
+        loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error al subir credenciales: ' + err.message);
+      }
+    }
+
+    function togglePasteJsonModal() {
+      const el = document.getElementById('pasteJsonSection');
+      if (el) el.classList.toggle('hidden');
+    }
+
+    async function savePastedJson() {
+      const text = document.getElementById('pasteJsonText').value.trim();
+      if (!text) return alert('Pega el contenido JSON de las credenciales');
+
+      try {
+        const res = await fetch('/api/gdrive/paste_credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credentials_json: text })
+        });
+        const data = await res.json();
+        if (data.test && data.test.connected) {
+          alert('¡Credenciales verificadas y conectadas con Google Drive con éxito!');
+          togglePasteJsonModal();
+        } else {
+          alert('Guardado con observaciones: ' + (data.test.message || 'Verifica el formato'));
+        }
+        loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error al procesar JSON: ' + err.message);
+      }
+    }
+
+    async function syncGDriveNow() {
+      try {
+        const res = await fetch('/api/gdrive/sync_now', { method: 'POST' });
+        const data = await res.json();
+        alert(`Sincronización iniciada: ${data.queued} nuevos archivos agregados a la cola de subida a Drive.`);
+        loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error al sincronizar: ' + err.message);
+      }
+    }
+
+    async function loadRecordingsList() {
+      const container = document.getElementById('recordingsListContainer');
+      if (!container) return;
+      container.innerHTML = '<div class="text-center py-4 text-xs text-zinc-500">Cargando grabaciones...</div>';
+
+      try {
+        const res = await fetch('/api/recording/list');
+        const list = await res.json();
+
+        if (!list || list.length === 0) {
+          container.innerHTML = '<div class="text-center py-6 text-xs text-zinc-500">No hay grabaciones guardadas aún. Pulsa "Iniciar Grabación Continua" arriba.</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+        list.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between text-xs hover:border-zinc-700 transition';
+
+          const sizeMb = (item.size / (1024 * 1024)).toFixed(1);
+          const dateStr = item.created_at ? new Date(item.created_at).toLocaleString() : '';
+
+          let statusBadge = '<span class="text-zinc-500 text-[10px]">💻 Local</span>';
+          if (item.status === 'uploaded') {
+            statusBadge = `<a href="${item.drive_url || '#'}" target="_blank" class="text-blue-400 hover:underline flex items-center space-x-1 text-[10px]">
+              <i data-lucide="cloud" class="w-3 h-3"></i><span>Google Drive</span>
+            </a>`;
+          } else if (item.status === 'pending_upload') {
+            statusBadge = '<span class="text-amber-400 text-[10px] animate-pulse">⏳ En cola de subida</span>';
+          }
+
+          card.innerHTML = `
+            <div class="space-y-0.5 truncate pr-2">
+              <div class="font-mono font-semibold text-zinc-200 truncate">${item.filename}</div>
+              <div class="flex items-center space-x-2 text-[10px] text-zinc-400">
+                <span>${dateStr}</span>
+                <span>•</span>
+                <span>${sizeMb} MB</span>
+                <span>•</span>
+                ${statusBadge}
+              </div>
+            </div>
+            <div class="flex items-center space-x-1.5 shrink-0">
+              <button onclick="playRecordedVideo('/recordings/${item.filename}', '${item.filename}')" class="p-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-lg transition" title="Ver Video">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              </button>
+              <a href="/recordings/${item.filename}" download="${item.filename}" class="p-1.5 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white rounded-lg transition" title="Descargar MP4">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              </a>
+              <button onclick="deleteRecordingClip('${item.filename}')" class="p-1.5 bg-zinc-800 text-zinc-400 hover:bg-red-900/60 hover:text-red-300 rounded-lg transition" title="Eliminar">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+
+        if (window.lucide) lucide.createIcons();
+      } catch (err) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-red-400">Error: ${err.message}</div>`;
+      }
+    }
+
+    function playRecordedVideo(url, filename) {
+      const modal = document.getElementById('videoModal');
+      const player = document.getElementById('videoModalPlayer');
+      const title = document.getElementById('videoModalTitle');
+      const dl = document.getElementById('videoModalDownload');
+
+      if (title) title.innerText = filename;
+      if (dl) { dl.href = url; dl.download = filename; }
+      if (player) {
+        player.src = url;
+        player.play().catch(() => {});
+      }
+      if (modal) modal.classList.remove('hidden');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function closeVideoModal() {
+      const modal = document.getElementById('videoModal');
+      const player = document.getElementById('videoModalPlayer');
+      if (player) { player.pause(); player.src = ''; }
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function deleteRecordingClip(filename) {
+      if (!confirm(`¿Eliminar la grabación ${filename}?`)) return;
+      try {
+        await fetch(`/api/recording/${filename}`, { method: 'DELETE' });
+        loadRecordingsList();
+        loadDriveAndRecordingStatus();
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    // ==========================================
+    // PWA & MOBILE APP INSTALL CONTROLLER
+    // ==========================================
+    let deferredPwaPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPwaPrompt = e;
+      const btn = document.getElementById('pwaInstallBtn');
+      if (btn) btn.classList.remove('hidden');
+    });
+
+    function promptPwaInstall() {
+      const modal = document.getElementById('pwaModal');
+      if (modal) modal.classList.remove('hidden');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function closePwaModal() {
+      const modal = document.getElementById('pwaModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function triggerPwaInstallPrompt() {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        const { outcome } = await deferredPwaPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('App PWA instalada por el usuario');
+        }
+        deferredPwaPrompt = null;
+        closePwaModal();
+      } else {
+        alert('Para instalar en tu celular:\n• En Android/Chrome: Abre el menú ⋮ y pulsa "Instalar aplicación" o "Agregar a pantalla principal".\n• En iPhone/Safari: Pulsa Compartir y "Agregar a pantalla de inicio".');
+      }
+    }
+
+    // Tabs
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('bg-emerald-600', 'text-white');
+        el.classList.add('bg-zinc-800', 'text-zinc-400');
+      });
+
+      const target = document.getElementById(`tabContent-${tabId}`);
+      if (target) target.classList.remove('hidden');
+      const btn = document.getElementById(`tabBtn-${tabId}`);
+      if (btn) {
+        btn.classList.add('bg-emerald-600', 'text-white');
+        btn.classList.remove('bg-zinc-800', 'text-zinc-400');
+      }
+      
+      if (window.lucide) lucide.createIcons();
+      if (tabId === 'galeria') loadGallery();
+      if (tabId === 'wifi') loadWifiConfig();
+      if (tabId === 'drive') {
+        loadDriveAndRecordingStatus();
+        loadRecordingsList();
+      }
+    }
+
+    function updateClock() {
+      const d = new Date();
+      document.getElementById('timestampNow').innerText = d.toLocaleTimeString();
+    }
+
+    // App Initialization
+    window.onload = function() {
+      if (window.lucide) lucide.createIcons();
+      updateClock();
+      setInterval(updateClock, 1000);
+      loadImmediateFrame();
+      startWebSocketStream();
+      setInterval(checkStreamHealth, 1000);
+      loadStatus();
+      loadDriveAndRecordingStatus();
+      loadImageSettings();
+      loadPresets();
+      loadGallery();
+      setupPttEvents();
+      
+      // Register Service Worker for mobile PWA
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          console.log('PWA Service Worker activo:', reg.scope);
+        }).catch(err => {
+          console.warn('SW registration:', err);
+        });
+      }
+
+      // Status polling every 8s (lightweight, responds from RAM in <40ms)
+      setInterval(loadStatus, 8000);
+      setInterval(loadDriveAndRecordingStatus, 15000);
+    };
+  </script>
+</body>
+</html>
