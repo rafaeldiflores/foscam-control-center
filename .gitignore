@@ -30,4 +30,5 @@ credentials.json
 # Local runtime logs & state
 *.log
 recordings_db.json
+telegram_config.json
 .system_generated/

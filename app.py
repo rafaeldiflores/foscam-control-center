@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from talk_protocol import FoscamTalkSession, generate_sound_effect, transcode_audio_to_pcm
 from recorder import recorder_manager, RECORDINGS_DIR
 from gdrive_sync import gdrive_manager, CREDENTIALS_DIR
+from ai_tracker import ai_tracker
+from telegram_alerts import telegram_notifier
 
 app = FastAPI(title="Foscam Control Center", version="2.1.0")
 
@@ -270,6 +272,36 @@ class FoscamCamera:
                 res[tag] = val
         return res
 
+    def ptz_step(self, direction: str, duration_ms: int = 150):
+        direction_map = {
+            "up": "ptzMoveUp",
+            "down": "ptzMoveDown",
+            "left": "ptzMoveLeft",
+            "right": "ptzMoveRight",
+            "upleft": "ptzMoveTopLeft",
+            "upright": "ptzMoveTopRight",
+            "downleft": "ptzMoveBottomLeft",
+            "downright": "ptzMoveBottomRight",
+        }
+        cmd = direction_map.get(direction.lower())
+        if not cmd:
+            return
+        dur_sec = max(0.08, min(1.0, duration_ms / 1000.0))
+        def _worker():
+            self.cgi_request(cmd)
+            time.sleep(dur_sec)
+            self.cgi_request("ptzStopRun")
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def ptz_reset(self):
+        return self.cgi_request("ptzReset")
+
+    def get_immediate_frame(self) -> Optional[bytes]:
+        try:
+            return self.get_snapshot_bytes(timeout=2.0)
+        except Exception:
+            return None
+
 MIC_GAIN = 5.0  # software boost applied to the browser microphone
 
 camera = FoscamCamera()
@@ -296,6 +328,10 @@ class RTSPStreamWorker:
                     self.proc.terminate()
                 except Exception:
                     pass
+
+    def get_latest_frame(self) -> Optional[bytes]:
+        with self.lock:
+            return self.latest_frame
 
     def restart(self):
         """Immediately terminates current FFmpeg process and clears buffer to force fresh RTSP handshake."""
@@ -379,8 +415,27 @@ class RTSPStreamWorker:
             time.sleep(1.0)
 
 rtsp_worker = RTSPStreamWorker(camera)
+ai_tracker.set_camera_and_worker(camera, rtsp_worker)
 
 # Request Models
+class AIConfigRequest(BaseModel):
+    ai_enabled: Optional[bool] = None
+    tracking_enabled: Optional[bool] = None
+    target_classes: Optional[list] = None
+    min_confidence: Optional[float] = None
+    return_home_enabled: Optional[bool] = None
+    home_preset: Optional[str] = None
+    deadzone_x: Optional[float] = None
+    deadzone_y: Optional[float] = None
+
+class TelegramConfigRequest(BaseModel):
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+    enabled: Optional[bool] = None
+    cooldown_seconds: Optional[int] = None
+    include_photo: Optional[bool] = None
+    app_url: Optional[str] = None
+
 class PTZMoveRequest(BaseModel):
     direction: str
     mode: Optional[str] = "step"       # "step" (clean jog mode) or "continuous"
@@ -1094,6 +1149,102 @@ def sync_gdrive_now():
 def get_gdrive_files():
     """Lista los videos respaldados en la carpeta de Google Drive."""
     return gdrive_manager.list_files()
+
+# ========================================================
+# AI VISION, PTZ AUTO-TRACKING & TELEGRAM ALERTS
+# ========================================================
+
+@app.get("/api/ai/status")
+def get_ai_status():
+    """Retorna el estado de la inferencia IA, FPS, detecciones y auto-tracking."""
+    return ai_tracker.get_status()
+
+@app.post("/api/ai/config")
+def update_ai_config(req: AIConfigRequest):
+    """Actualiza la configuración de detección de IA y Auto-Tracking PTZ."""
+    with ai_tracker.lock:
+        if req.ai_enabled is not None:
+            ai_tracker.ai_enabled = req.ai_enabled
+        if req.tracking_enabled is not None:
+            ai_tracker.tracking_enabled = req.tracking_enabled
+        if req.target_classes is not None:
+            ai_tracker.target_classes = req.target_classes
+        if req.min_confidence is not None:
+            ai_tracker.min_confidence = req.min_confidence
+        if req.return_home_enabled is not None:
+            ai_tracker.return_home_enabled = req.return_home_enabled
+        if req.home_preset is not None:
+            ai_tracker.home_preset = req.home_preset
+        if req.deadzone_x is not None:
+            ai_tracker.deadzone_x = req.deadzone_x
+        if req.deadzone_y is not None:
+            ai_tracker.deadzone_y = req.deadzone_y
+    ai_tracker.save_config()
+    return ai_tracker.get_status()
+
+@app.post("/api/ai/toggle_tracking")
+def toggle_ai_tracking():
+    """Activa o desactiva rápidamente el auto-tracking de motores PTZ."""
+    with ai_tracker.lock:
+        ai_tracker.tracking_enabled = not ai_tracker.tracking_enabled
+    ai_tracker.save_config()
+    return {"tracking_enabled": ai_tracker.tracking_enabled}
+
+@app.get("/api/ai/annotated_frame")
+def get_ai_annotated_frame():
+    """Devuelve el último fotograma con bounding boxes dibujados por la IA."""
+    jpeg = ai_tracker.last_annotated_jpeg
+    if not jpeg:
+        jpeg = rtsp_worker.latest_frame
+    if not jpeg:
+        raise HTTPException(status_code=404, detail="No hay fotograma disponible aún")
+    return Response(content=jpeg, media_type="image/jpeg")
+
+@app.get("/api/telegram/status")
+def get_telegram_status():
+    """Estado y configuración actual del bot de alertas de Telegram."""
+    return {
+        "enabled": telegram_notifier.enabled,
+        "configured": bool(telegram_notifier.bot_token and telegram_notifier.chat_id),
+        "cooldown_seconds": telegram_notifier.cooldown_seconds,
+        "include_photo": telegram_notifier.include_photo,
+        "app_url": telegram_notifier.app_url,
+        "is_silenced": telegram_notifier.is_silenced()
+    }
+
+@app.post("/api/telegram/config")
+def update_telegram_config(req: TelegramConfigRequest):
+    """Actualiza credenciales y opciones de alerta en Telegram."""
+    if req.bot_token is not None:
+        telegram_notifier.bot_token = req.bot_token.strip()
+    if req.chat_id is not None:
+        telegram_notifier.chat_id = req.chat_id.strip()
+    if req.enabled is not None:
+        telegram_notifier.enabled = req.enabled
+    if req.cooldown_seconds is not None:
+        telegram_notifier.cooldown_seconds = req.cooldown_seconds
+    if req.include_photo is not None:
+        telegram_notifier.include_photo = req.include_photo
+    if req.app_url is not None:
+        telegram_notifier.app_url = req.app_url.strip()
+    telegram_notifier.save_config()
+    return get_telegram_status()
+
+@app.post("/api/telegram/test")
+def test_telegram_alert():
+    """Envía un mensaje de prueba a Telegram para verificar el Token y Chat ID."""
+    if not telegram_notifier.bot_token or not telegram_notifier.chat_id:
+        raise HTTPException(status_code=400, detail="Telegram no configurado (Token o Chat ID faltante)")
+    
+    photo = rtsp_worker.latest_frame
+    res = telegram_notifier.send_message(
+        "🔔 *Prueba de Alertas Telegram - Foscam Control Center*\n\n✅ La conexión entre el servidor de IA y Telegram funciona correctamente.",
+        photo_bytes=photo
+    )
+    if res.get("ok"):
+        return {"status": "ok", "message": "Mensaje enviado exitosamente a Telegram"}
+    else:
+        return {"status": "error", "error": res.get("description", "Error desconocido")}
 
 app.mount("/recordings", StaticFiles(directory=RECORDINGS_DIR), name="recordings")
 app.mount("/snapshots", StaticFiles(directory=SNAPSHOTS_DIR), name="snapshots")
