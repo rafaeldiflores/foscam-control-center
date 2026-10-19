@@ -219,9 +219,13 @@
         </div>
 
         <!-- Video Bottom Info Bar -->
-        <div class="px-4 py-2 bg-zinc-900 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
-          <div class="flex items-center space-x-3">
+        <div class="px-4 py-2 bg-zinc-900 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+          <div class="flex items-center space-x-2.5">
             <span>RTSP: <code class="text-zinc-300 font-mono">rtsp://admin:@<span class="cam-ip">192.168.1.13</span>:88/videoMain</code></span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center space-x-1" title="Perfil de codificación de hardware activo en DSP Hi3518C">
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+              <span>30 FPS • GOP 15 (0.5s) • CBR</span>
+            </span>
           </div>
           <div class="flex items-center space-x-2">
             <span id="timestampNow" class="font-mono">--:--:--</span>

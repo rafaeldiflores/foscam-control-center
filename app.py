@@ -156,11 +156,37 @@ class FoscamCamera:
         except Exception as e:
             print(f"ensure_max_volume error: {e}")
 
+    def ensure_optimal_video_encoding(self):
+        """Forces camera hardware DSP to 30 FPS, ultra-low GOP (15/10), and CBR for zero-jitter streaming."""
+        try:
+            cur = self.cgi_request("getVideoStreamParam", timeout=2.5)
+            if cur.get("frameRate0") != "30" or cur.get("GOP0") != "15" or cur.get("isVBR0") != "0":
+                self.cgi_request("setVideoStreamParam", {
+                    "streamType": 0,
+                    "resolution": 0,
+                    "bitRate": 2097152,
+                    "frameRate": 30,
+                    "GOP": 15,
+                    "isVBR": 0
+                }, timeout=2.5)
+            if cur.get("frameRate1") != "30" or cur.get("GOP1") != "15" or cur.get("isVBR1") != "0":
+                self.cgi_request("setVideoStreamParam", {
+                    "streamType": 1,
+                    "resolution": 1,
+                    "bitRate": 2097152,
+                    "frameRate": 30,
+                    "GOP": 15,
+                    "isVBR": 0
+                }, timeout=2.5)
+        except Exception as e:
+            print(f"ensure_optimal_video_encoding error: {e}")
+
     def _state_refresher(self):
         """Refreshes camera state gently every 6 seconds in background without locking up UI."""
         consecutive_errors = 0
         time.sleep(1.0)
         self.ensure_max_volume()
+        self.ensure_optimal_video_encoding()
         self.get_wifi_details()
         wifi_cycle = 0
         while True:
@@ -497,8 +523,8 @@ class RTSPStreamWorker:
                 '-i', rtsp_url,
                 '-vf', scale_filter,
                 '-f', 'mjpeg',
-                '-q:v', '5',
-                '-r', '20',
+                '-q:v', '4',
+                '-r', '30',
                 '-flush_packets', '1',
                 '-an',
                 '-'
@@ -700,8 +726,9 @@ def reconnect_camera():
     except Exception:
         pass
 
-    # 3. Ensure volume and get updated Wi-Fi details
+    # 3. Ensure volume, encoding profile, and get updated Wi-Fi details
     camera.ensure_max_volume()
+    camera.ensure_optimal_video_encoding()
     wifi = camera.get_wifi_details()
 
     return {
@@ -715,6 +742,17 @@ def reconnect_camera():
 def set_stream_mode(req: StreamModeRequest):
     rtsp_worker.set_mode(req.mode)
     return {"mode": rtsp_worker.mode}
+
+@app.get("/api/video/encoding")
+def get_video_encoding():
+    """Returns the current hardware DSP encoding profiles from the camera."""
+    return camera.cgi_request("getVideoStreamParam")
+
+@app.post("/api/video/encoding/optimize")
+def optimize_video_encoding():
+    """Forces 30 FPS, low GOP (15/10), and CBR for ultra-low latency."""
+    camera.ensure_optimal_video_encoding()
+    return {"status": "optimized", "params": camera.cgi_request("getVideoStreamParam")}
 
 async def generate_mjpeg_stream(request: Request):
     """Ultra-responsive real-time stream generator backed by FFmpeg RTSP worker."""
@@ -734,9 +772,9 @@ async def generate_mjpeg_stream(request: Request):
                     b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
                     + frame + b"\r\n"
                 )
-                await asyncio.sleep(0.03)
-            else:
                 await asyncio.sleep(0.02)
+            else:
+                await asyncio.sleep(0.01)
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
@@ -774,9 +812,9 @@ async def websocket_stream(websocket: WebSocket):
             if frame and curr_time > last_sent:
                 last_sent = curr_time
                 await websocket.send_bytes(frame)
-                await asyncio.sleep(0.035)
+                await asyncio.sleep(0.02)
             else:
-                await asyncio.sleep(0.015)
+                await asyncio.sleep(0.01)
     except WebSocketDisconnect:
         pass
     except Exception:
