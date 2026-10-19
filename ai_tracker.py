@@ -175,8 +175,8 @@ class AITrackerController:
     def _process_auto_tracking(self, detections: List[Dict[str, Any]]):
         """Calcula el error respecto al centro usando filtro EMA y acciona micro-pasos calibrados."""
         now = time.time()
-        # Rate-limiter: al menos 600ms entre comandos de motor para permitir desplazamiento físico
-        if (now - self.last_motor_command_time) < 0.60:
+        # Rate-limiter: al menos 650ms entre comandos de motor para permitir refresco de fotogramas
+        if (now - self.last_motor_command_time) < 0.65:
             return
 
         # Priorizar 'person' si existe, de lo contrario el de mayor confianza
@@ -199,11 +199,12 @@ class AITrackerController:
 
         moved = False
 
-        # Corrección Horizontal (Pan) suave
+        # Corrección Horizontal (Pan) suave y proporcional
         if abs(err_x) > self.deadzone_x:
             direction = "left" if err_x < 0 else "right"
-            # Micro-pulso fino de 50ms a 85ms (desplaza entre 1.5° y 3° a velocidad baja)
-            duration = int(50 + min(35, abs(err_x) * 70))
+            excess_x = abs(err_x) - self.deadzone_x
+            # Micro-pulso proporcional fino de 40ms a 105ms (0.7° a 1.9° a velocidad 0)
+            duration = int(40 + min(65, excess_x * 160))
             self.camera.ptz_step(direction, duration_ms=duration, is_tracking=True)
             moved = True
             logger.info(f"Auto-Tracking PAN -> {direction.upper()} (err: {err_x:.2f}, dur: {duration}ms)")
@@ -211,8 +212,9 @@ class AITrackerController:
         # Corrección Vertical (Tilt) si el error es significativo
         if not moved and abs(err_y) > self.deadzone_y:
             direction = "up" if err_y < 0 else "down"
-            # Micro-pulso fino vertical de 45ms a 75ms
-            duration = int(45 + min(30, abs(err_y) * 60))
+            excess_y = abs(err_y) - self.deadzone_y
+            # Micro-pulso proporcional fino de 35ms a 85ms
+            duration = int(35 + min(50, excess_y * 140))
             self.camera.ptz_step(direction, duration_ms=duration, is_tracking=True)
             moved = True
             logger.info(f"Auto-Tracking TILT -> {direction.upper()} (err: {err_y:.2f}, dur: {duration}ms)")
