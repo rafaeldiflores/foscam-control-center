@@ -84,6 +84,11 @@ class FoscamCamera:
             "bssid": "D4:01:68:BE:20:00"
         }
         
+        # Estimated 3D spatial orientation in degrees (Pan: -150 to +150, Tilt: -20 to +90)
+        self.pan_angle = 0.0
+        self.tilt_angle = 0.0
+        self.ptz_speed = 1
+
         # Start gentle background state poller
         self.poller_thread = threading.Thread(target=self._state_refresher, daemon=True)
         self.poller_thread.start()
@@ -272,29 +277,100 @@ class FoscamCamera:
                 res[tag] = val
         return res
 
-    def ptz_step(self, direction: str, duration_ms: int = 150):
+    def _raw_cgi_call(self, cmd: str, params: Optional[Dict[str, Any]] = None, timeout: float = 1.5) -> Dict[str, str]:
+        """Direct CGI call assuming cgi_lock is already held if atomic sequence."""
+        p = {"cmd": cmd, "usr": self.usr, "pwd": self.pwd}
+        if params:
+            p.update(params)
+        query = urllib.parse.urlencode(p)
+        url = f"http://{self.ip}:{self.port}/cgi-bin/CGIProxy.fcgi?{query}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "FoscamControlCenter"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw_xml = resp.read().decode("utf-8", errors="ignore")
+                return self._parse_xml(raw_xml)
+        except Exception as e:
+            return {"result": "-1", "error": str(e)}
+
+    def ptz_step(self, direction: str, duration_ms: int = 80, is_tracking: bool = False):
         direction_map = {
-            "up": "ptzMoveUp",
-            "down": "ptzMoveDown",
-            "left": "ptzMoveLeft",
-            "right": "ptzMoveRight",
-            "upleft": "ptzMoveTopLeft",
-            "upright": "ptzMoveTopRight",
-            "downleft": "ptzMoveBottomLeft",
-            "downright": "ptzMoveBottomRight",
+            "up": ("ptzMoveUp", 0, 1),
+            "down": ("ptzMoveDown", 0, -1),
+            "left": ("ptzMoveLeft", -1, 0),
+            "right": ("ptzMoveRight", 1, 0),
+            "upleft": ("ptzMoveTopLeft", -1, 1),
+            "upright": ("ptzMoveTopRight", 1, 1),
+            "downleft": ("ptzMoveBottomLeft", -1, -1),
+            "downright": ("ptzMoveBottomRight", 1, -1),
         }
-        cmd = direction_map.get(direction.lower())
-        if not cmd:
+        item = direction_map.get(direction.lower())
+        if not item:
             return
-        dur_sec = max(0.08, min(1.0, duration_ms / 1000.0))
+        cmd, pan_sign, tilt_sign = item
+
+        # Micro-jog duration
+        dur_ms = max(40, min(500, duration_ms))
+        dur_sec = dur_ms / 1000.0
+
         def _worker():
-            self.cgi_request(cmd)
-            time.sleep(dur_sec)
-            self.cgi_request("ptzStopRun")
+            # ATOMIC EXECUTION: hold cgi_lock through the entire step duration!
+            # This GUARANTEES that ptzStopRun is never starved or delayed by background pollers!
+            with self.cgi_lock:
+                self._raw_cgi_call(cmd, timeout=1.0)
+                time.sleep(dur_sec)
+                self._raw_cgi_call("ptzStopRun", timeout=1.0)
+
+            # Integrate degrees
+            spd = 0 if is_tracking else self.ptz_speed
+            pan_deg_per_ms = 0.024 if spd == 0 else (0.042 if spd == 1 else 0.065)
+            tilt_deg_per_ms = 0.018 if spd == 0 else (0.032 if spd == 1 else 0.050)
+
+            delta_pan = pan_sign * dur_ms * pan_deg_per_ms
+            delta_tilt = tilt_sign * dur_ms * tilt_deg_per_ms
+
+            self.pan_angle = max(-150.0, min(150.0, round(self.pan_angle + delta_pan, 1)))
+            self.tilt_angle = max(-20.0, min(90.0, round(self.tilt_angle + delta_tilt, 1)))
+
         threading.Thread(target=_worker, daemon=True).start()
 
+    def ptz_goto_degrees(self, target_pan: Optional[float] = None, target_tilt: Optional[float] = None, delta_pan: Optional[float] = None, delta_tilt: Optional[float] = None):
+        """Moves camera accurately to target angles or by delta degrees using atomic step calibration."""
+        spd = self.ptz_speed
+        pan_deg_per_ms = 0.024 if spd == 0 else (0.042 if spd == 1 else 0.065)
+        tilt_deg_per_ms = 0.018 if spd == 0 else (0.032 if spd == 1 else 0.050)
+
+        d_pan = delta_pan if delta_pan is not None else ((target_pan - self.pan_angle) if target_pan is not None else 0.0)
+        d_tilt = delta_tilt if delta_tilt is not None else ((target_tilt - self.tilt_angle) if target_tilt is not None else 0.0)
+
+        def _exec():
+            # Pan move
+            if abs(d_pan) >= 0.8:
+                cmd = "ptzMoveRight" if d_pan > 0 else "ptzMoveLeft"
+                dur_ms = max(40, min(3500, int(abs(d_pan) / pan_deg_per_ms)))
+                with self.cgi_lock:
+                    self._raw_cgi_call(cmd, timeout=1.0)
+                    time.sleep(dur_ms / 1000.0)
+                    self._raw_cgi_call("ptzStopRun", timeout=1.0)
+                self.pan_angle = max(-150.0, min(150.0, round(self.pan_angle + d_pan, 1)))
+                time.sleep(0.1)
+
+            # Tilt move
+            if abs(d_tilt) >= 0.8:
+                cmd = "ptzMoveUp" if d_tilt > 0 else "ptzMoveDown"
+                dur_ms = max(40, min(2500, int(abs(d_tilt) / tilt_deg_per_ms)))
+                with self.cgi_lock:
+                    self._raw_cgi_call(cmd, timeout=1.0)
+                    time.sleep(dur_ms / 1000.0)
+                    self._raw_cgi_call("ptzStopRun", timeout=1.0)
+                self.tilt_angle = max(-20.0, min(90.0, round(self.tilt_angle + d_tilt, 1)))
+
+        threading.Thread(target=_exec, daemon=True).start()
+
     def ptz_reset(self):
-        return self.cgi_request("ptzReset")
+        res = self.cgi_request("ptzReset")
+        self.pan_angle = 0.0
+        self.tilt_angle = 0.0
+        return res
 
     def get_immediate_frame(self) -> Optional[bytes]:
         try:
@@ -440,6 +516,12 @@ class PTZMoveRequest(BaseModel):
     direction: str
     mode: Optional[str] = "step"       # "step" (clean jog mode) or "continuous"
     duration: Optional[int] = 250      # milliseconds for step mode (e.g. 150, 250, 500)
+
+class PTZGotoDegreesRequest(BaseModel):
+    pan: Optional[float] = None
+    tilt: Optional[float] = None
+    delta_pan: Optional[float] = None
+    delta_tilt: Optional[float] = None
 
 class PTZSpeedRequest(BaseModel):
     speed: int
@@ -817,34 +899,64 @@ async def ptz_move(req: PTZMoveRequest):
     if not cmd:
         raise HTTPException(status_code=400, detail="Invalid direction")
 
-    if req.direction.lower() in ["stop", "center"]:
-        res = await asyncio.to_thread(camera.cgi_request, cmd)
-        return {"command": cmd, "result": res}
+    if req.direction.lower() == "center":
+        camera.ptz_reset()
+        return {"command": "ptzReset", "pan": 0.0, "tilt": 0.0}
+
+    if req.direction.lower() == "stop":
+        res = await asyncio.to_thread(camera.cgi_request, "ptzStopRun")
+        return {"command": "ptzStopRun", "result": res}
 
     if req.mode == "continuous":
         res = await asyncio.to_thread(camera.cgi_request, cmd)
         return {"command": cmd, "result": res, "mode": "continuous"}
     else:
-        # Step mode: moves camera for precise duration and stops automatically!
-        dur_sec = max(0.08, min(1.5, (req.duration or 250) / 1000.0))
-        
-        def _step_worker():
-            with _ptz_step_thread_lock:
-                camera.cgi_request(cmd)
-                time.sleep(dur_sec)
-                camera.cgi_request("ptzStopRun")
-
-        threading.Thread(target=_step_worker, daemon=True).start()
-        return {"command": cmd, "mode": "step", "duration_ms": int(dur_sec * 1000)}
+        # Atomic step mode with real degree tracking
+        dur_ms = req.duration or 200
+        camera.ptz_step(req.direction, duration_ms=dur_ms)
+        return {
+            "command": cmd,
+            "mode": "step",
+            "duration_ms": dur_ms,
+            "pan": camera.pan_angle,
+            "tilt": camera.tilt_angle
+        }
 
 @app.post("/api/ptz/stop")
 async def ptz_stop():
     res = await asyncio.to_thread(camera.cgi_request, "ptzStopRun")
     return {"command": "ptzStopRun", "result": res}
 
+@app.get("/api/ptz/coordinates")
+def get_ptz_coordinates():
+    """Devuelve las coordenadas espaciales estimadas de la cámara en 3D (Pan y Tilt en grados)."""
+    return {
+        "pan": camera.pan_angle,
+        "tilt": camera.tilt_angle,
+        "speed": camera.ptz_speed
+    }
+
+@app.post("/api/ptz/goto_degrees")
+def ptz_goto_degrees(req: PTZGotoDegreesRequest):
+    """Mueve la cámara con micro-pasos calibrados a un ángulo exacto o diferencial en grados."""
+    camera.ptz_goto_degrees(req.pan, req.tilt, req.delta_pan, req.delta_tilt)
+    return {
+        "pan": camera.pan_angle,
+        "tilt": camera.tilt_angle,
+        "speed": camera.ptz_speed
+    }
+
+@app.post("/api/ptz/calibrate")
+def ptz_calibrate():
+    """Recalibra el centro de coordenadas en 0.0, 0.0."""
+    camera.pan_angle = 0.0
+    camera.tilt_angle = 0.0
+    return {"status": "calibrated", "pan": 0.0, "tilt": 0.0}
+
 @app.post("/api/ptz/speed")
 def ptz_speed(req: PTZSpeedRequest):
     speed = max(0, min(4, req.speed))
+    camera.ptz_speed = speed
     res = camera.cgi_request("setPTZSpeed", {"speed": speed})
     return {"speed": speed, "result": res}
 

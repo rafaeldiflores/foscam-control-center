@@ -33,8 +33,9 @@ class AITrackerController:
         self.min_confidence = 0.65
         self.return_home_enabled = True
         self.home_preset = "center"
-        self.deadzone_x = 0.16   # Margen horizontal antes de mover motor
-        self.deadzone_y = 0.22   # Margen vertical antes de mover motor
+        self.deadzone_x = 0.20   # Margen horizontal seguro (20%)
+        self.deadzone_y = 0.25   # Margen vertical seguro (25%)
+        self._smoothed_target = None
 
         # Estado en tiempo real
         self.is_running = False
@@ -156,6 +157,7 @@ class AITrackerController:
                         self._process_auto_tracking(detections)
 
                 else:
+                    self._smoothed_target = None
                     # Sin detecciones: comprobar si debe regresar a la posición de guardia
                     if self.tracking_enabled and self.return_home_enabled and not self.returned_home:
                         if (now - self.last_target_time) > 12.0: # 12 segundos sin presencia
@@ -171,36 +173,47 @@ class AITrackerController:
                 time.sleep(0.5)
 
     def _process_auto_tracking(self, detections: List[Dict[str, Any]]):
-        """Calcula el error respecto al centro y acciona los motores paso a paso."""
+        """Calcula el error respecto al centro usando filtro EMA y acciona micro-pasos calibrados."""
         now = time.time()
-        # Rate-limiter: al menos 450ms entre comandos de motor para permitir desplazamiento físico
-        if (now - self.last_motor_command_time) < 0.45:
+        # Rate-limiter: al menos 600ms entre comandos de motor para permitir desplazamiento físico
+        if (now - self.last_motor_command_time) < 0.60:
             return
 
         # Priorizar 'person' si existe, de lo contrario el de mayor confianza
         persons = [d for d in detections if d["class_name"] == "person"]
         target = persons[0] if persons else detections[0]
 
-        norm_cx, norm_cy = target["norm_center"]
-        err_x = norm_cx - 0.5   # Negativo: Izquierda, Positivo: Derecha
-        err_y = norm_cy - 0.5   # Negativo: Arriba, Positivo: Abajo
+        raw_cx, raw_cy = target["norm_center"]
+
+        # Filtro de Suavizado Exponencial (EMA, alpha=0.35)
+        # Evita sacudidas por movimientos menores o balanceo corporal
+        if self._smoothed_target is None:
+            self._smoothed_target = [raw_cx, raw_cy]
+        else:
+            self._smoothed_target[0] = 0.35 * raw_cx + 0.65 * self._smoothed_target[0]
+            self._smoothed_target[1] = 0.35 * raw_cy + 0.65 * self._smoothed_target[1]
+
+        smooth_cx, smooth_cy = self._smoothed_target
+        err_x = smooth_cx - 0.5   # Negativo: Izquierda, Positivo: Derecha
+        err_y = smooth_cy - 0.5   # Negativo: Arriba, Positivo: Abajo
 
         moved = False
 
-        # Corrección Horizontal (Pan)
+        # Corrección Horizontal (Pan) suave
         if abs(err_x) > self.deadzone_x:
             direction = "left" if err_x < 0 else "right"
-            # Pulso proporcional según distancia al centro (120ms a 220ms)
-            duration = int(120 + min(120, abs(err_x) * 200))
-            self.camera.ptz_step(direction, duration_ms=duration)
+            # Micro-pulso fino de 50ms a 85ms (desplaza entre 1.5° y 3° a velocidad baja)
+            duration = int(50 + min(35, abs(err_x) * 70))
+            self.camera.ptz_step(direction, duration_ms=duration, is_tracking=True)
             moved = True
             logger.info(f"Auto-Tracking PAN -> {direction.upper()} (err: {err_x:.2f}, dur: {duration}ms)")
 
         # Corrección Vertical (Tilt) si el error es significativo
         if not moved and abs(err_y) > self.deadzone_y:
             direction = "up" if err_y < 0 else "down"
-            duration = int(100 + min(100, abs(err_y) * 150))
-            self.camera.ptz_step(direction, duration_ms=duration)
+            # Micro-pulso fino vertical de 45ms a 75ms
+            duration = int(45 + min(30, abs(err_y) * 60))
+            self.camera.ptz_step(direction, duration_ms=duration, is_tracking=True)
             moved = True
             logger.info(f"Auto-Tracking TILT -> {direction.upper()} (err: {err_y:.2f}, dur: {duration}ms)")
 
@@ -227,6 +240,8 @@ class AITrackerController:
             "inference_ms": self.inference_ms,
             "detections_count": len(self.current_detections),
             "detections": self.current_detections,
+            "pan": getattr(self.camera, "pan_angle", 0.0) if self.camera else 0.0,
+            "tilt": getattr(self.camera, "tilt_angle", 0.0) if self.camera else 0.0,
             "telegram": {
                 "enabled": telegram_notifier.enabled,
                 "configured": bool(telegram_notifier.bot_token and telegram_notifier.chat_id),

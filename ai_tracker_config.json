@@ -1,6 +1,6 @@
 {
   "ai_enabled": true,
-  "tracking_enabled": false,
+  "tracking_enabled": true,
   "target_classes": [
     "person",
     "vehicle"

@@ -18,6 +18,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Three.js 3D WebGL Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -414,6 +416,104 @@
 
           </div>
 
+        </div>
+      </div>
+
+      <!-- 3D Spatial Orientation & Precision Angle Control Card -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 rounded-lg bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center">
+              <i data-lucide="compass" class="w-4 h-4 text-cyan-400"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-zinc-100 flex items-center space-x-1.5">
+                <span>Orientación 3D en Tiempo Real</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono font-bold">Grados Reales</span>
+              </h3>
+              <p class="text-[11px] text-zinc-400">Modelo 3D sincronizado con la posición física del lente.</p>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="calibratePtzAngles()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-medium flex items-center space-x-1 transition shadow" title="Calibrar el ángulo actual como 0°, 0°">
+              <i data-lucide="crosshair" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Calibrar 0°</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3D Canvas Viewport Container -->
+        <div class="relative w-full h-64 rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden shadow-inner group">
+          <div id="threejs-canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+          <!-- Floating Real-Time Angle Overlay -->
+          <div class="absolute top-3 left-3 bg-zinc-900/90 backdrop-blur border border-zinc-800 px-3 py-1.5 rounded-xl shadow-lg flex items-center space-x-3 text-xs pointer-events-none select-none">
+            <div class="flex items-center space-x-1 font-mono">
+              <span class="text-zinc-400 text-[10px] uppercase font-bold">PAN (Horiz):</span>
+              <strong id="badgePanAngle" class="text-cyan-400 font-bold">0.0°</strong>
+            </div>
+            <div class="h-3 w-px bg-zinc-700"></div>
+            <div class="flex items-center space-x-1 font-mono">
+              <span class="text-zinc-400 text-[10px] uppercase font-bold">TILT (Vert):</span>
+              <strong id="badgeTiltAngle" class="text-emerald-400 font-bold">0.0°</strong>
+            </div>
+          </div>
+
+          <!-- Drag-to-Aim Hint Overlay -->
+          <div class="absolute bottom-2.5 left-3 text-[10px] text-zinc-500 font-medium pointer-events-none select-none flex items-center space-x-1">
+            <i data-lucide="move" class="w-3 h-3"></i>
+            <span>Arrastra la cámara 3D para rotar el lente o pulsa los botones de grados</span>
+          </div>
+
+          <!-- Target Pending Move Confirm Floating Button (if dragged manually) -->
+          <div id="threeAimConfirmBadge" class="hidden absolute bottom-2.5 right-3">
+            <button onclick="apply3dDragHeading()" class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg flex items-center space-x-1.5 active:scale-95 transition">
+              <i data-lucide="navigation" class="w-3.5 h-3.5"></i>
+              <span id="threeAimConfirmText">Girar Cámara a este Ángulo</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Degree Stepper Controls Toolbar -->
+        <div class="mt-4 space-y-3">
+          <!-- Horizontal (Pan) Precision Degrees -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-zinc-300 font-semibold flex items-center space-x-1">
+                <i data-lucide="move-horizontal" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Giro Horizontal (Grados exactos):</span>
+              </span>
+              <span class="text-[10px] text-zinc-400">Pulsos finos calibrados</span>
+            </div>
+            <div class="grid grid-cols-7 gap-1.5 text-xs font-mono">
+              <button onclick="ptzRotateRelative(-45, 0)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Girar 45° a la izquierda">-45°</button>
+              <button onclick="ptzRotateRelative(-15, 0)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Girar 15° a la izquierda">-15°</button>
+              <button onclick="ptzRotateRelative(-5, 0)" class="py-1.5 bg-zinc-800 hover:bg-cyan-900/40 text-cyan-300 border border-zinc-700 rounded-lg font-bold transition active:scale-95" title="Micro-giro 5° a la izquierda">-5°</button>
+              <button onclick="ptzRotateAbsolute(0, 0)" class="py-1.5 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600 hover:text-white rounded-lg font-black transition active:scale-95" title="Centrar cámara (0°, 0°)">0°</button>
+              <button onclick="ptzRotateRelative(5, 0)" class="py-1.5 bg-zinc-800 hover:bg-cyan-900/40 text-cyan-300 border border-zinc-700 rounded-lg font-bold transition active:scale-95" title="Micro-giro 5° a la derecha">+5°</button>
+              <button onclick="ptzRotateRelative(15, 0)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Girar 15° a la derecha">+15°</button>
+              <button onclick="ptzRotateRelative(45, 0)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Girar 45° a la derecha">+45°</button>
+            </div>
+          </div>
+
+          <!-- Vertical (Tilt) Precision Degrees -->
+          <div class="space-y-1.5 pt-1 border-t border-zinc-800/80">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-zinc-300 font-semibold flex items-center space-x-1">
+                <i data-lucide="move-vertical" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Inclinación Vertical (Elevación):</span>
+              </span>
+              <span class="text-[10px] text-zinc-400">Horizonte y altura</span>
+            </div>
+            <div class="grid grid-cols-5 gap-1.5 text-xs font-mono">
+              <button onclick="ptzRotateRelative(0, 20)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Subir 20°">+20° Arriba</button>
+              <button onclick="ptzRotateRelative(0, 10)" class="py-1.5 bg-zinc-800 hover:bg-emerald-900/40 text-emerald-300 border border-zinc-700 rounded-lg font-bold transition active:scale-95" title="Subir 10°">+10° Arriba</button>
+              <button onclick="ptzRotateAbsolute(null, 0)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Horizonte plano nivelado (0°)">0° Horizonte</button>
+              <button onclick="ptzRotateRelative(0, -10)" class="py-1.5 bg-zinc-800 hover:bg-emerald-900/40 text-emerald-300 border border-zinc-700 rounded-lg font-bold transition active:scale-95" title="Bajar 10°">-10° Abajo</button>
+              <button onclick="ptzRotateRelative(0, -20)" class="py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition active:scale-95" title="Bajar 20°">-20° Abajo</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1484,12 +1584,342 @@
     });
 
     function ptzReset() {
+      targetPanDeg = 0.0;
+      targetTiltDeg = 0.0;
+      update3DOverlayAngles(0, 0);
+      const confirmBadge = document.getElementById('threeAimConfirmBadge');
+      if (confirmBadge) confirmBadge.classList.add('hidden');
       fetch('/api/ptz/move', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ direction: 'center' })
       });
     }
+
+    // ========================================================
+    // 3D SPATIAL ORIENTATION ENGINE & DEGREE CONTROLS (THREE.JS)
+    // ========================================================
+    let threeScene, threeCamera, threeRenderer;
+    let threePanPivot, threeTiltPivot, threeFovCone, threeLensAperture;
+    let currentPanDeg = 0.0, currentTiltDeg = 0.0;
+    let targetPanDeg = 0.0, targetTiltDeg = 0.0;
+    let dragStartPointer = null;
+    let dragStartPan = 0.0, dragStartTilt = 0.0;
+    let isDragging3D = false;
+
+    function init3DCameraViewer() {
+      const container = document.getElementById('threejs-canvas-container');
+      if (!container || typeof THREE === 'undefined') return;
+
+      const width = container.clientWidth || 320;
+      const height = container.clientHeight || 256;
+
+      // 1. Scene & Camera
+      threeScene = new THREE.Scene();
+      threeCamera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+      threeCamera.position.set(0, 3.8, 6.2);
+      threeCamera.lookAt(0, 0.7, 0);
+
+      // 2. Renderer
+      threeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      threeRenderer.setSize(width, height);
+      threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      threeRenderer.shadowMap.enabled = true;
+      container.innerHTML = '';
+      container.appendChild(threeRenderer.domElement);
+
+      // 3. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+      threeScene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.3);
+      dirLight.position.set(4, 8, 5);
+      threeScene.add(dirLight);
+
+      const rimLight = new THREE.DirectionalLight(0x10b981, 0.7);
+      rimLight.position.set(-4, -2, -4);
+      threeScene.add(rimLight);
+
+      // 4. Floor Grid & Compass Rose
+      const gridHelper = new THREE.GridHelper(8, 16, 0x06b6d4, 0x27272a);
+      gridHelper.position.y = -0.01;
+      threeScene.add(gridHelper);
+
+      // Circular Base Stand
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.4, metalness: 0.6 });
+      const baseGeo = new THREE.CylinderGeometry(1.9, 2.2, 0.45, 36);
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.225;
+      threeScene.add(baseMesh);
+
+      // Compass Ring around base
+      const ringGeo = new THREE.RingGeometry(2.25, 2.45, 36);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.rotation.x = -Math.PI / 2;
+      ringMesh.position.y = 0.01;
+      threeScene.add(ringMesh);
+
+      // 5. PAN PIVOT (Rotates around Y axis)
+      threePanPivot = new THREE.Group();
+      threePanPivot.position.y = 0.45;
+      threeScene.add(threePanPivot);
+
+      // Turret Neck (Upper Body)
+      const neckMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.35, metalness: 0.7 });
+      const neckGeo = new THREE.CylinderGeometry(1.6, 1.8, 0.6, 32);
+      const neckMesh = new THREE.Mesh(neckGeo, neckMat);
+      neckMesh.position.y = 0.3;
+      threePanPivot.add(neckMesh);
+
+      // Fork Brackets (Left & Right Arms)
+      const armMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.6 });
+      const armGeo = new THREE.BoxGeometry(0.35, 1.4, 0.7);
+      const leftArm = new THREE.Mesh(armGeo, armMat);
+      leftArm.position.set(-1.45, 1.0, 0);
+      threePanPivot.add(leftArm);
+      const rightArm = new THREE.Mesh(armGeo, armMat);
+      rightArm.position.set(1.45, 1.0, 0);
+      threePanPivot.add(rightArm);
+
+      // 6. TILT PIVOT (Rotates around X axis)
+      threeTiltPivot = new THREE.Group();
+      threeTiltPivot.position.set(0, 1.1, 0);
+      threePanPivot.add(threeTiltPivot);
+
+      // Spherical Camera Head (Dome)
+      const headMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.2, metalness: 0.85 });
+      const headGeo = new THREE.SphereGeometry(1.25, 32, 32);
+      const headMesh = new THREE.Mesh(headGeo, headMat);
+      threeTiltPivot.add(headMesh);
+
+      // Front Lens Barrel (Pointing along +Z axis)
+      const lensBarrelMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.3, metalness: 0.8 });
+      const lensBarrelGeo = new THREE.CylinderGeometry(0.65, 0.72, 0.5, 32);
+      const lensBarrel = new THREE.Mesh(lensBarrelGeo, lensBarrelMat);
+      lensBarrel.rotation.x = Math.PI / 2;
+      lensBarrel.position.set(0, 0, 1.05);
+      threeTiltPivot.add(lensBarrel);
+
+      // Glowing Camera Lens Optical Glass
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: 0x06b6d4,
+        emissive: 0x0891b2,
+        emissiveIntensity: 0.7,
+        roughness: 0.1,
+        metalness: 0.95
+      });
+      const glassGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.1, 32);
+      threeLensAperture = new THREE.Mesh(glassGeo, glassMat);
+      threeLensAperture.rotation.x = Math.PI / 2;
+      threeLensAperture.position.set(0, 0, 1.3);
+      threeTiltPivot.add(threeLensAperture);
+
+      // 11 Infrared LED ring indicators around lens
+      const ledGeo = new THREE.SphereGeometry(0.06, 8, 8);
+      const ledMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      for (let i = 0; i < 11; i++) {
+        const angle = (i / 11) * Math.PI * 2;
+        const led = new THREE.Mesh(ledGeo, ledMat);
+        led.position.set(Math.cos(angle) * 0.58, Math.sin(angle) * 0.58, 1.25);
+        threeTiltPivot.add(led);
+      }
+
+      // 7. Projected 3D Field of View (FOV) Vision Frustum
+      const coneMat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4,
+        transparent: true,
+        opacity: 0.16,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const coneGeo = new THREE.ConeGeometry(2.8, 5.0, 16, 1, true);
+      threeFovCone = new THREE.Mesh(coneGeo, coneMat);
+      threeFovCone.rotation.x = -Math.PI / 2; // Point forward along +Z
+      threeFovCone.position.set(0, 0, 3.8);
+      threeTiltPivot.add(threeFovCone);
+
+      // Vision Cone Edges (High-Tech HUD styling)
+      const wireMat = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.4 });
+      const wireGeo = new THREE.EdgesGeometry(coneGeo);
+      const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
+      threeFovCone.add(wireMesh);
+
+      // 8. Pointer / Touch Direct Drag & Aim Handler
+      setup3DDragControls(container);
+
+      // 9. Resize Observer
+      window.addEventListener('resize', on3DWindowResize);
+
+      // 10. Animation Loop
+      animate3D();
+    }
+
+    function setup3DDragControls(elem) {
+      elem.addEventListener('pointerdown', (e) => {
+        isDragging3D = true;
+        dragStartPointer = { x: e.clientX, y: e.clientY };
+        dragStartPan = targetPanDeg;
+        dragStartTilt = targetTiltDeg;
+        elem.setPointerCapture(e.pointerId);
+      });
+
+      elem.addEventListener('pointermove', (e) => {
+        if (!isDragging3D || !dragStartPointer) return;
+        const dx = e.clientX - dragStartPointer.x;
+        const dy = e.clientY - dragStartPointer.y;
+
+        // Sensitivity: 0.6 degrees per pixel
+        const newPan = Math.max(-150, Math.min(150, dragStartPan - (dx * 0.6)));
+        const newTilt = Math.max(-20, Math.min(90, dragStartTilt - (dy * 0.5)));
+
+        targetPanDeg = Math.round(newPan * 10) / 10;
+        targetTiltDeg = Math.round(newTilt * 10) / 10;
+
+        update3DOverlayAngles(targetPanDeg, targetTiltDeg);
+
+        // Show floating confirm button
+        const confirmBadge = document.getElementById('threeAimConfirmBadge');
+        const confirmText = document.getElementById('threeAimConfirmText');
+        if (confirmBadge) confirmBadge.classList.remove('hidden');
+        if (confirmText) {
+          confirmText.innerText = `Apuntar a Pan: ${targetPanDeg > 0 ? '+' : ''}${targetPanDeg}°, Tilt: ${targetTiltDeg > 0 ? '+' : ''}${targetTiltDeg}°`;
+        }
+      });
+
+      const onPointerEnd = (e) => {
+        if (isDragging3D) {
+          isDragging3D = false;
+          dragStartPointer = null;
+        }
+      };
+
+      elem.addEventListener('pointerup', onPointerEnd);
+      elem.addEventListener('pointercancel', onPointerEnd);
+    }
+
+    function on3DWindowResize() {
+      const container = document.getElementById('threejs-canvas-container');
+      if (!container || !threeCamera || !threeRenderer) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      threeCamera.aspect = width / height;
+      threeCamera.updateProjectionMatrix();
+      threeRenderer.setSize(width, height);
+    }
+
+    function animate3D() {
+      requestAnimationFrame(animate3D);
+      if (!threePanPivot || !threeTiltPivot) return;
+
+      // Smooth interpolation (lerp) towards target degrees
+      currentPanDeg += (targetPanDeg - currentPanDeg) * 0.16;
+      currentTiltDeg += (targetTiltDeg - currentTiltDeg) * 0.16;
+
+      // Convert degrees to radians for Three.js
+      // Pan: negative because yaw right corresponds to positive angle
+      threePanPivot.rotation.y = THREE.MathUtils.degToRad(-currentPanDeg);
+      // Tilt: pitch up corresponds to negative X rotation in standard camera coordinates
+      threeTiltPivot.rotation.x = THREE.MathUtils.degToRad(-currentTiltDeg);
+
+      threeRenderer.render(threeScene, threeCamera);
+    }
+
+    function update3DOverlayAngles(pan, tilt) {
+      const bPan = document.getElementById('badgePanAngle');
+      const bTilt = document.getElementById('badgeTiltAngle');
+      if (bPan) bPan.innerText = (pan >= 0 ? '+' : '') + Number(pan).toFixed(1) + '°';
+      if (bTilt) bTilt.innerText = (tilt >= 0 ? '+' : '') + Number(tilt).toFixed(1) + '°';
+    }
+
+    async function fetchPtzCoordinates() {
+      try {
+        const res = await fetch('/api/ptz/coordinates');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isDragging3D) {
+          targetPanDeg = data.pan || 0.0;
+          targetTiltDeg = data.tilt || 0.0;
+          update3DOverlayAngles(targetPanDeg, targetTiltDeg);
+        }
+      } catch (e) {
+        console.warn('Error fetching PTZ coordinates:', e);
+      }
+    }
+
+    async function ptzRotateRelative(deltaPan, deltaTilt) {
+      // Optimistic 3D update
+      targetPanDeg = Math.max(-150, Math.min(150, Math.round((targetPanDeg + deltaPan) * 10) / 10));
+      targetTiltDeg = Math.max(-20, Math.min(90, Math.round((targetTiltDeg + deltaTilt) * 10) / 10));
+      update3DOverlayAngles(targetPanDeg, targetTiltDeg);
+
+      const confirmBadge = document.getElementById('threeAimConfirmBadge');
+      if (confirmBadge) confirmBadge.classList.add('hidden');
+
+      try {
+        await fetch('/api/ptz/goto_degrees', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delta_pan: deltaPan, delta_tilt: deltaTilt })
+        });
+        setTimeout(fetchPtzCoordinates, 800);
+      } catch (err) {
+        console.error('ptzRotateRelative error:', err);
+      }
+    }
+
+    async function ptzRotateAbsolute(pan, tilt) {
+      if (pan === 0 && tilt === 0) {
+        return handleCenterClick();
+      }
+
+      if (pan !== null) targetPanDeg = pan;
+      if (tilt !== null) targetTiltDeg = tilt;
+      update3DOverlayAngles(targetPanDeg, targetTiltDeg);
+
+      const confirmBadge = document.getElementById('threeAimConfirmBadge');
+      if (confirmBadge) confirmBadge.classList.add('hidden');
+
+      const payload = {};
+      if (pan !== null) payload.pan = pan;
+      if (tilt !== null) payload.tilt = tilt;
+
+      try {
+        await fetch('/api/ptz/goto_degrees', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        setTimeout(fetchPtzCoordinates, 800);
+      } catch (err) {
+        console.error('ptzRotateAbsolute error:', err);
+      }
+    }
+
+    async function calibratePtzAngles() {
+      targetPanDeg = 0.0;
+      targetTiltDeg = 0.0;
+      currentPanDeg = 0.0;
+      currentTiltDeg = 0.0;
+      update3DOverlayAngles(0, 0);
+
+      const confirmBadge = document.getElementById('threeAimConfirmBadge');
+      if (confirmBadge) confirmBadge.classList.add('hidden');
+
+      try {
+        await fetch('/api/ptz/calibrate', { method: 'POST' });
+        alert('Orientación 3D calibrada a 0.0°, 0.0° (Posición Central)');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function apply3dDragHeading() {
+      await ptzRotateAbsolute(targetPanDeg, targetTiltDeg);
+      const confirmBadge = document.getElementById('threeAimConfirmBadge');
+      if (confirmBadge) confirmBadge.classList.add('hidden');
+    }
+
 
     function changePtzSpeed(speed) {
       fetch('/api/ptz/speed', {
@@ -2972,6 +3402,13 @@
         if (infLabel) infLabel.innerText = `${Math.round(data.inference_ms || 0)} ms`;
         if (detectLabel) detectLabel.innerText = data.detections_count || 0;
 
+        // 3D Angle update from AI Tracking
+        if (data.pan !== undefined && data.tilt !== undefined && !isDragging3D) {
+          targetPanDeg = data.pan;
+          targetTiltDeg = data.tilt;
+          update3DOverlayAngles(targetPanDeg, targetTiltDeg);
+        }
+
         // Return Home
         const homeCheck = document.getElementById('aiReturnHomeCheck');
         if (homeCheck) homeCheck.checked = !!data.return_home_enabled;
@@ -3181,6 +3618,8 @@
       loadPresets();
       loadGallery();
       setupPttEvents();
+      init3DCameraViewer();
+      fetchPtzCoordinates();
       
       // Register Service Worker for mobile PWA
       if ('serviceWorker' in navigator) {
@@ -3195,6 +3634,7 @@
       setInterval(loadStatus, 8000);
       setInterval(loadDriveAndRecordingStatus, 15000);
       setInterval(loadAiStatus, 6000);
+      setInterval(fetchPtzCoordinates, 4000);
     };
   </script>
 </body>
