@@ -1,7 +1,7 @@
 {
   "enabled": false,
   "stream_mode": "main",
-  "segment_duration": 900,
-  "delete_after_upload": false,
+  "segment_duration": 300,
+  "delete_after_upload": true,
   "retention_days": 7
 }

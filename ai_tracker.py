@@ -204,6 +204,7 @@ class AITrackerController:
         self.home_preset = "center"
         self.deadzone_x = 0.18   # Margen horizontal seguro (18%)
         self.deadzone_y = 0.22   # Margen vertical seguro (22%)
+        self.model_name = "yolov8n.onnx"
         
         # Motor ByteTrack y Fijación de Blanco (Target Locking)
         self.byte_tracker = ByteTracker(max_lost_frames=12, iou_threshold=0.35)
@@ -244,6 +245,9 @@ class AITrackerController:
                     self.home_preset = data.get("home_preset", "center")
                     self.deadzone_x = data.get("deadzone_x", 0.18)
                     self.deadzone_y = data.get("deadzone_y", 0.22)
+                    self.model_name = data.get("model_name", "yolov8n.onnx")
+                    if self.model_name != ai_detector.active_model_name:
+                        ai_detector.load_model(self.model_name)
             except Exception as e:
                 logger.error(f"Error cargando ai_tracker_config.json: {e}")
 
@@ -257,13 +261,38 @@ class AITrackerController:
                 "return_home_enabled": self.return_home_enabled,
                 "home_preset": self.home_preset,
                 "deadzone_x": self.deadzone_x,
-                "deadzone_y": self.deadzone_y
+                "deadzone_y": self.deadzone_y,
+                "model_name": ai_detector.active_model_name
             }
             try:
                 with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
                 logger.error(f"Error guardando ai_tracker_config.json: {e}")
+
+    def switch_model(self, model_name: str) -> bool:
+        """Cambia el modelo YOLO activo en caliente y guarda la configuración."""
+        with self.lock:
+            success = ai_detector.load_model(model_name)
+            if success:
+                self.model_name = ai_detector.active_model_name
+                data = {
+                    "ai_enabled": self.ai_enabled,
+                    "tracking_enabled": self.tracking_enabled,
+                    "target_classes": self.target_classes,
+                    "min_confidence": self.min_confidence,
+                    "return_home_enabled": self.return_home_enabled,
+                    "home_preset": self.home_preset,
+                    "deadzone_x": self.deadzone_x,
+                    "deadzone_y": self.deadzone_y,
+                    "model_name": self.model_name
+                }
+                try:
+                    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2)
+                except Exception as e:
+                    logger.error(f"Error guardando ai_tracker_config.json tras cambio de modelo: {e}")
+            return success
 
     def get_allowed_classes(self) -> List[str]:
         classes = []
@@ -484,6 +513,9 @@ class AITrackerController:
             "detections_count": len(self.current_detections),
             "detections": self.current_detections,
             "locked_track_id": self.locked_track_id,
+            "model_name": ai_detector.active_model_name,
+            "model_type": ai_detector.model_type,
+            "available_models": ai_detector.get_available_models(),
             "pan": getattr(self.camera, "pan_angle", 0.0) if self.camera else 0.0,
             "tilt": getattr(self.camera, "tilt_angle", 0.0) if self.camera else 0.0,
             "telegram": {

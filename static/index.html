@@ -1325,6 +1325,20 @@
               </div>
               <input type="range" id="aiConfInput" min="40" max="95" value="65" oninput="document.getElementById('aiConfVal').innerText = this.value + '%'" onchange="saveAiConfig()" class="w-full accent-purple-500">
             </div>
+
+            <div class="pt-2 border-t border-zinc-800/80">
+              <div class="flex justify-between items-center text-[11px] mb-1">
+                <span class="text-zinc-300 font-medium">Motor de Inferencia YOLO:</span>
+                <span id="aiModelBadge" class="text-purple-400 font-mono text-[10px]">yolov8n.onnx</span>
+              </div>
+              <select id="aiModelSelect" onchange="changeAiModel(this.value)" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-purple-500">
+                <option value="yolov8n.onnx">YOLOv8n (FP32 - 19.6 FPS Recomendado)</option>
+                <option value="yolo11n.onnx">YOLO11n (FP32 - 18.0 FPS Última Gen)</option>
+                <option value="yolov10n.onnx">YOLOv10n (FP32 - 13.9 FPS NMS-Free)</option>
+                <option value="yolov8n_int8.onnx">YOLOv8n INT8 (Cuantizado 3.3 MB)</option>
+                <option value="yolov10n_int8.onnx">YOLOv10n INT8 (Cuantizado 2.5 MB)</option>
+              </select>
+            </div>
           </div>
 
           <!-- Card 3: Alertas Instantáneas a Telegram -->
@@ -3712,6 +3726,14 @@
           if (confVal) confVal.innerText = `${pct}%`;
         }
 
+        // Active YOLO Model
+        if (data.model_name) {
+          const mSelect = document.getElementById('aiModelSelect');
+          const mBadge = document.getElementById('aiModelBadge');
+          if (mSelect) mSelect.value = data.model_name;
+          if (mBadge) mBadge.innerText = data.model_name;
+        }
+
         // Telegram Status
         const tg = data.telegram || {};
         const tgBadge = document.getElementById('telegramStatusBadge');
@@ -3780,6 +3802,26 @@
         })
       });
       loadAiStatus();
+    }
+
+    async function changeAiModel(modelName) {
+      try {
+        const badge = document.getElementById('aiModelBadge');
+        if (badge) badge.innerText = 'Cargando...';
+        const res = await fetch('/api/ai/model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_name: modelName })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error al cambiar modelo: ' + (err.detail || 'desconocido'));
+        }
+        await loadAiStatus();
+        refreshAiAnnotatedFrame();
+      } catch (err) {
+        alert('Error al conectar con el servidor: ' + err.message);
+      }
     }
 
     async function loadTelegramSettings() {

@@ -25,6 +25,7 @@ from talk_protocol import FoscamTalkSession, generate_sound_effect, transcode_au
 from recorder import recorder_manager, RECORDINGS_DIR
 from gdrive_sync import gdrive_manager, CREDENTIALS_DIR
 from ai_tracker import ai_tracker
+from ai_detector import ai_detector
 from telegram_alerts import telegram_notifier
 
 app = FastAPI(title="Foscam Control Center", version="2.1.0")
@@ -631,6 +632,10 @@ class AIConfigRequest(BaseModel):
     home_preset: Optional[str] = None
     deadzone_x: Optional[float] = None
     deadzone_y: Optional[float] = None
+    model_name: Optional[str] = None
+
+class SwitchModelRequest(BaseModel):
+    model_name: str
 
 class TelegramConfigRequest(BaseModel):
     bot_token: Optional[str] = None
@@ -1466,8 +1471,35 @@ def update_ai_config(req: AIConfigRequest):
             ai_tracker.deadzone_x = req.deadzone_x
         if req.deadzone_y is not None:
             ai_tracker.deadzone_y = req.deadzone_y
+        if req.model_name is not None:
+            ai_tracker.switch_model(req.model_name)
     ai_tracker.save_config()
     return ai_tracker.get_status()
+
+@app.get("/api/ai/models")
+def get_ai_models():
+    """Retorna lista de modelos YOLO ONNX disponibles en models/ y el modelo activo."""
+    return {
+        "active_model": ai_detector.active_model_name,
+        "model_type": ai_detector.model_type,
+        "models": ai_detector.get_available_models()
+    }
+
+@app.post("/api/ai/model")
+def switch_ai_model(req: SwitchModelRequest):
+    """Cambia el modelo YOLO ONNX activo en tiempo real."""
+    success = ai_tracker.switch_model(req.model_name)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo cargar el modelo '{req.model_name}'. Verifique que exista en models/"
+        )
+    return {
+        "status": "success",
+        "active_model": ai_detector.active_model_name,
+        "model_type": ai_detector.model_type,
+        "models": ai_detector.get_available_models()
+    }
 
 @app.post("/api/ai/toggle_tracking")
 def toggle_ai_tracking():

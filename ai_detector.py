@@ -1,14 +1,14 @@
 """
-High-Performance AI Vision Detector using YOLOv8 ONNX Runtime for Foscam IP Cameras.
+High-Performance AI Vision Detector using YOLO (v8, 11, v10) ONNX Runtime for Foscam IP Cameras.
 Optimized for AMD Ryzen CPU vectorized inference without PyTorch dependencies.
-Includes Letterbox scaling, Pre-NMS Class Filtering, and Smart Motion Gate.
+Includes Multi-Model Dynamic Switching, Letterbox scaling, Pre-NMS Class Filtering, and Smart Motion Gate.
 """
 
 import io
 import time
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 
 import numpy as np
 import onnxruntime as ort
@@ -18,7 +18,9 @@ logger = logging.getLogger("ai_detector")
 logging.basicConfig(level=logging.INFO)
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL_PATH = BASE_DIR / "models" / "yolov8n.onnx"
+MODELS_DIR = BASE_DIR / "models" if (BASE_DIR / "models").exists() else Path("C:/app camara/models")
+DEFAULT_MODEL_NAME = "yolov8n.onnx"
+DEFAULT_MODEL_PATH = MODELS_DIR / DEFAULT_MODEL_NAME
 FALLBACK_MODEL_PATH = Path("C:/app camara/models/yolov8n.onnx")
 MODEL_PATH = DEFAULT_MODEL_PATH if DEFAULT_MODEL_PATH.exists() else FALLBACK_MODEL_PATH
 
@@ -78,11 +80,14 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float = 0.45) -> L
 
 
 class AIDetector:
-    def __init__(self, model_path: Path = MODEL_PATH):
-        self.model_path = model_path
+    def __init__(self, model_path: Optional[Union[str, Path]] = None):
+        self.models_dir = MODELS_DIR
         self.session: Optional[ort.InferenceSession] = None
         self.input_name = "images"
         self.is_loaded = False
+        self.model_path: Path = Path(model_path) if model_path else MODEL_PATH
+        self.active_model_name: str = self.model_path.name if self.model_path else DEFAULT_MODEL_NAME
+        self.model_type: str = "yolo_nms"  # "yolo_nms" o "yolov10"
 
         # Pre-alocación de memoria para evitar garbage collection en cada frame
         self._input_blob = np.zeros((1, 3, 640, 640), dtype=np.float32)
@@ -94,12 +99,21 @@ class AIDetector:
         self._motion_pixel_diff_threshold: float = 3.2
         self._max_idle_skip_sec: float = 1.5
 
-        self._load_model()
+        self.load_model(self.model_path)
 
-    def _load_model(self):
-        if not self.model_path.exists():
-            logger.error(f"Archivo de modelo YOLOv8 no encontrado en: {self.model_path}")
-            return
+    def load_model(self, model_name_or_path: Optional[Union[str, Path]] = None) -> bool:
+        """Carga o cambia dinámicamente el modelo YOLO en tiempo de ejecución."""
+        if model_name_or_path:
+            p = Path(model_name_or_path)
+            target = p if p.is_absolute() else self.models_dir / model_name_or_path
+        elif self.model_path and self.model_path.exists():
+            target = self.model_path
+        else:
+            target = self.models_dir / DEFAULT_MODEL_NAME
+
+        if not target.exists():
+            logger.error(f"Archivo de modelo YOLO ONNX no encontrado en: {target}")
+            return False
 
         try:
             opts = ort.SessionOptions()
@@ -109,16 +123,48 @@ class AIDetector:
             opts.enable_mem_pattern = True
             opts.enable_cpu_mem_arena = True
 
-            self.session = ort.InferenceSession(
-                str(self.model_path),
+            sess = ort.InferenceSession(
+                str(target),
                 sess_options=opts,
                 providers=['CPUExecutionProvider']
             )
-            self.input_name = self.session.get_inputs()[0].name
+
+            # Auto-detectar arquitectura a partir de la firma de salida
+            out_shape = sess.get_outputs()[0].shape
+            if len(out_shape) == 3 and out_shape[1] == 300 and out_shape[2] == 6:
+                detected_type = "yolov10"
+            else:
+                detected_type = "yolo_nms"
+
+            self.session = sess
+            self.model_path = target
+            self.active_model_name = target.name
+            self.input_name = sess.get_inputs()[0].name
+            self.model_type = detected_type
             self.is_loaded = True
-            logger.info(f"Modelo YOLOv8n ONNX cargado exitosamente desde {self.model_path}")
+
+            logger.info(
+                f"Modelo ONNX {self.active_model_name} ({self.model_type}) "
+                f"cargado exitosamente desde {target}"
+            )
+            return True
         except Exception as e:
-            logger.error(f"Error cargando modelo YOLOv8n: {e}")
+            logger.error(f"Error cargando modelo {target}: {e}")
+            return False
+
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        """Lista todos los modelos .onnx disponibles en el directorio models/."""
+        models = []
+        if self.models_dir.exists():
+            for p in sorted(self.models_dir.glob("*.onnx")):
+                size_mb = round(p.stat().st_size / (1024 * 1024), 2)
+                models.append({
+                    "name": p.name,
+                    "path": str(p),
+                    "size_mb": size_mb,
+                    "is_active": (p.name == self.active_model_name)
+                })
+        return models
 
     def _has_scene_changed(self, image: Image.Image) -> bool:
         """
@@ -190,6 +236,7 @@ class AIDetector:
 
         # 1. Preprocesamiento con Letterboxing sin distorsión
         blob, scale, pad_w, pad_h = self._preprocess_letterbox(image)
+        inv_scale = 1.0 / scale
 
         # 2. Inferencia en ONNX Runtime
         t0 = time.time()
@@ -197,82 +244,121 @@ class AIDetector:
         self._last_inference_ts = time.time()
         inference_time_ms = round((self._last_inference_ts - t0) * 1000, 1)
 
-        # 3. Postprocesamiento vectorizado: shape (8400, 84)
-        out = outputs[0][0].T
-        boxes_raw = out[:, :4]
-        scores_raw = out[:, 4:]
+        # 3. Postprocesamiento según arquitectura del modelo
+        detections: List[Dict[str, Any]] = []
 
-        # Pre-filtrado de clases ANTES de argmax/NMS para ahorrar CPU
-        if allowed_classes:
-            valid_cids = [CLASS_NAME_TO_ID[c] for c in allowed_classes if c in CLASS_NAME_TO_ID]
-            if not valid_cids:
+        if self.model_type == "yolov10":
+            # Formato End-to-End NMS-Free: shape (1, 300, 6) -> [x1, y1, x2, y2, score, class_id]
+            preds = outputs[0][0]
+            scores = preds[:, 4]
+            mask = scores >= conf_threshold
+            if not np.any(mask):
                 self._last_detections = []
                 return []
-            scores_sub = scores_raw[:, valid_cids]
-            sub_idx = np.argmax(scores_sub, axis=1)
-            confidences = scores_sub[np.arange(scores_sub.shape[0]), sub_idx]
-            class_ids = np.array(valid_cids, dtype=np.int32)[sub_idx]
+
+            filt = preds[mask]
+            for p in filt:
+                cid = int(p[5])
+                cname = COCO_CLASSES[cid] if cid < len(COCO_CLASSES) else f"class_{cid}"
+                if allowed_classes and cname not in allowed_classes:
+                    continue
+                confidence = float(p[4])
+
+                # Deshacer letterbox padding y escalar a dimensiones originales
+                bx1 = max(0, int(round((p[0] - pad_w) * inv_scale)))
+                by1 = max(0, int(round((p[1] - pad_h) * inv_scale)))
+                bx2 = min(orig_w, int(round((p[2] - pad_w) * inv_scale)))
+                by2 = min(orig_h, int(round((p[3] - pad_h) * inv_scale)))
+
+                if bx2 <= bx1 or by2 <= by1:
+                    continue
+
+                center_x = (bx1 + bx2) // 2
+                center_y = (by1 + by2) // 2
+                detections.append({
+                    "class_id": cid,
+                    "class_name": cname,
+                    "confidence": round(confidence, 2),
+                    "box": [bx1, by1, bx2, by2],
+                    "center": (center_x, center_y),
+                    "norm_center": (round(center_x / orig_w, 3), round(center_y / orig_h, 3)),
+                    "width": bx2 - bx1,
+                    "height": by2 - by1,
+                    "inference_ms": inference_time_ms,
+                    "model": self.active_model_name
+                })
         else:
-            class_ids = np.argmax(scores_raw, axis=1)
-            confidences = np.max(scores_raw, axis=1)
+            # Formato YOLOv8 / YOLO11: shape (1, 84, 8400)
+            out = outputs[0][0].T
+            boxes_raw = out[:, :4]
+            scores_raw = out[:, 4:]
 
-        mask = confidences >= conf_threshold
-        if not np.any(mask):
-            self._last_detections = []
-            return []
+            # Pre-filtrado de clases ANTES de argmax/NMS para ahorrar CPU
+            if allowed_classes:
+                valid_cids = [CLASS_NAME_TO_ID[c] for c in allowed_classes if c in CLASS_NAME_TO_ID]
+                if not valid_cids:
+                    self._last_detections = []
+                    return []
+                scores_sub = scores_raw[:, valid_cids]
+                sub_idx = np.argmax(scores_sub, axis=1)
+                confidences = scores_sub[np.arange(scores_sub.shape[0]), sub_idx]
+                class_ids = np.array(valid_cids, dtype=np.int32)[sub_idx]
+            else:
+                class_ids = np.argmax(scores_raw, axis=1)
+                confidences = np.max(scores_raw, axis=1)
 
-        boxes_filt = boxes_raw[mask]
-        conf_filt = confidences[mask]
-        class_filt = class_ids[mask]
+            mask = confidences >= conf_threshold
+            if not np.any(mask):
+                self._last_detections = []
+                return []
 
-        # Convertir cajas (cx, cy, w, h) a (x1, y1, x2, y2) en espacio 640
-        half_w = boxes_filt[:, 2] * 0.5
-        half_h = boxes_filt[:, 3] * 0.5
-        x1_640 = boxes_filt[:, 0] - half_w
-        y1_640 = boxes_filt[:, 1] - half_h
-        x2_640 = boxes_filt[:, 0] + half_w
-        y2_640 = boxes_filt[:, 1] + half_h
-        boxes_xyxy_640 = np.stack([x1_640, y1_640, x2_640, y2_640], axis=1)
+            boxes_filt = boxes_raw[mask]
+            conf_filt = confidences[mask]
+            class_filt = class_ids[mask]
 
-        # 4. Non-Maximum Suppression (NMS)
-        keep_indices = nms(boxes_xyxy_640, conf_filt, iou_threshold=0.45)
-        if not keep_indices:
-            self._last_detections = []
-            return []
+            # Convertir cajas (cx, cy, w, h) a (x1, y1, x2, y2) en espacio 640
+            half_w = boxes_filt[:, 2] * 0.5
+            half_h = boxes_filt[:, 3] * 0.5
+            x1_640 = boxes_filt[:, 0] - half_w
+            y1_640 = boxes_filt[:, 1] - half_h
+            x2_640 = boxes_filt[:, 0] + half_w
+            y2_640 = boxes_filt[:, 1] + half_h
+            boxes_xyxy_640 = np.stack([x1_640, y1_640, x2_640, y2_640], axis=1)
 
-        inv_scale = 1.0 / scale
-        detections = []
+            # 4. Non-Maximum Suppression (NMS)
+            keep_indices = nms(boxes_xyxy_640, conf_filt, iou_threshold=0.45)
+            if not keep_indices:
+                self._last_detections = []
+                return []
 
-        for idx in keep_indices:
-            cid = int(class_filt[idx])
-            cname = COCO_CLASSES[cid] if cid < len(COCO_CLASSES) else f"class_{cid}"
-            confidence = float(conf_filt[idx])
+            for idx in keep_indices:
+                cid = int(class_filt[idx])
+                cname = COCO_CLASSES[cid] if cid < len(COCO_CLASSES) else f"class_{cid}"
+                confidence = float(conf_filt[idx])
 
-            # Deshacer letterbox padding y escalar a dimensiones originales
-            bx1 = max(0, int(round((boxes_xyxy_640[idx][0] - pad_w) * inv_scale)))
-            by1 = max(0, int(round((boxes_xyxy_640[idx][1] - pad_h) * inv_scale)))
-            bx2 = min(orig_w, int(round((boxes_xyxy_640[idx][2] - pad_w) * inv_scale)))
-            by2 = min(orig_h, int(round((boxes_xyxy_640[idx][3] - pad_h) * inv_scale)))
+                # Deshacer letterbox padding y escalar a dimensiones originales
+                bx1 = max(0, int(round((boxes_xyxy_640[idx][0] - pad_w) * inv_scale)))
+                by1 = max(0, int(round((boxes_xyxy_640[idx][1] - pad_h) * inv_scale)))
+                bx2 = min(orig_w, int(round((boxes_xyxy_640[idx][2] - pad_w) * inv_scale)))
+                by2 = min(orig_h, int(round((boxes_xyxy_640[idx][3] - pad_h) * inv_scale)))
 
-            if bx2 <= bx1 or by2 <= by1:
-                continue
+                if bx2 <= bx1 or by2 <= by1:
+                    continue
 
-            center_x = (bx1 + bx2) // 2
-            center_y = (by1 + by2) // 2
-            norm_cx = round(center_x / orig_w, 3)
-            norm_cy = round(center_y / orig_h, 3)
-
-            detections.append({
-                "class_id": cid,
-                "class_name": cname,
-                "confidence": round(confidence, 2),
-                "box": [bx1, by1, bx2, by2],
-                "center": (center_x, center_y),
-                "norm_center": (norm_cx, norm_cy),
-                "width": bx2 - bx1,
-                "height": by2 - by1,
-                "inference_ms": inference_time_ms
-            })
+                center_x = (bx1 + bx2) // 2
+                center_y = (by1 + by2) // 2
+                detections.append({
+                    "class_id": cid,
+                    "class_name": cname,
+                    "confidence": round(confidence, 2),
+                    "box": [bx1, by1, bx2, by2],
+                    "center": (center_x, center_y),
+                    "norm_center": (round(center_x / orig_w, 3), round(center_y / orig_h, 3)),
+                    "width": bx2 - bx1,
+                    "height": by2 - by1,
+                    "inference_ms": inference_time_ms,
+                    "model": self.active_model_name
+                })
 
         self._last_detections = detections
         return detections
@@ -296,9 +382,14 @@ class AIDetector:
             else:
                 color = (139, 92, 246)
 
-            draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+            # Si es el blanco fijado en tracking, destacar con borde más grueso
+            border_width = 4 if det.get("is_locked") else 2
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=border_width)
 
-            label = f"{cname.upper()} {conf}%"
+            lock_badge = " [LOCKED]" if det.get("is_locked") else ""
+            track_badge = f"#{det['track_id']} " if "track_id" in det else ""
+            label = f"{track_badge}{cname.upper()} {conf}%{lock_badge}"
+
             text_w = len(label) * 8 + 10
             text_h = 18
             y_top = max(0, y1 - text_h)
