@@ -65,42 +65,45 @@
 
   <!-- Top Navigation Bar -->
   <header class="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-950/50">
-          <i data-lucide="video" class="w-5 h-5 text-white"></i>
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5 sm:space-x-3">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+          <i data-lucide="video" class="w-4 h-4 sm:w-5 sm:h-5 text-white"></i>
         </div>
         <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="font-bold text-lg leading-tight tracking-tight">Foscam Control Center</h1>
-            <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">FI9821W V2</span>
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <h1 class="font-bold text-base sm:text-lg leading-tight tracking-tight">
+              <span class="sm:hidden">Foscam</span>
+              <span class="hidden sm:inline">Foscam Control Center</span>
+            </h1>
+            <span class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">FI9821W</span>
           </div>
-          <p class="text-xs text-zinc-400" id="camIpBadge">Cámara: 192.168.1.13:88</p>
+          <p class="hidden sm:block text-xs text-zinc-400" id="camIpBadge">Cámara: 192.168.1.13:88</p>
         </div>
       </div>
 
-      <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="flex items-center space-x-1.5 sm:space-x-3">
         <!-- Wi-Fi Signal Badge -->
-        <div id="wifiSignalBadge" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs cursor-pointer hover:bg-zinc-800 transition" onclick="switchTab('wifi'); refreshWifiSignal();" title="Señal Wi-Fi de la Cámara - Clic para ver detalles">
+        <div id="wifiSignalBadge" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs cursor-pointer hover:bg-zinc-800 transition" onclick="switchTab('wifi'); refreshWifiSignal();" title="Señal Wi-Fi de la Cámara - Clic para ver detalles">
           <i data-lucide="wifi" id="wifiSignalIcon" class="w-3.5 h-3.5 text-emerald-400"></i>
           <span class="font-bold text-emerald-400" id="wifiSignalText">--%</span>
         </div>
 
-        <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs">
+        <div class="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 text-xs">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" id="statusDot"></span>
-          <span class="text-zinc-300 font-medium" id="statusText">En Línea</span>
+          <span class="text-zinc-300 font-medium hidden sm:inline" id="statusText">En Línea</span>
         </div>
 
         <!-- Botón Reconectar Cámara -->
-        <button onclick="reconnectCamera()" id="reconnectBtn" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-xs text-zinc-200 border border-zinc-700/50 transition shadow" title="Reiniciar transmisión y reconectar cámara">
+        <button onclick="reconnectCamera()" id="reconnectBtn" class="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-xs text-zinc-200 border border-zinc-700/50 transition shadow" title="Reiniciar transmisión y reconectar cámara">
           <i data-lucide="refresh-cw" id="reconnectIcon" class="w-3.5 h-3.5 text-emerald-400"></i>
-          <span id="reconnectText">Reconectar</span>
+          <span id="reconnectText" class="hidden sm:inline">Reconectar</span>
         </button>
 
         <!-- Botón Instalar App Móvil PWA -->
-        <button onclick="promptPwaInstall()" id="pwaInstallBtn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600 text-xs font-semibold text-emerald-300 hover:text-white transition shadow" title="Instalar Aplicación en Celular o PC">
+        <button onclick="promptPwaInstall()" id="pwaInstallBtn" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600 text-xs font-semibold text-emerald-300 hover:text-white transition shadow" title="Instalar Aplicación en Celular o PC">
           <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
-          <span>App Móvil</span>
+          <span class="hidden sm:inline">App Móvil</span>
         </button>
 
         <button onclick="syncClock()" class="hidden md:flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 transition" title="Sincronizar Hora">
@@ -112,7 +115,7 @@
   </header>
 
   <!-- Main Content Layout -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
 
     <!-- LEFT COLUMN: Live Feed + PTZ Joystick (Cols 7 on lg) -->
     <section class="lg:col-span-7 flex flex-col space-y-4">
@@ -120,47 +123,47 @@
       <!-- Video Viewport Card -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl relative group">
         <!-- Floating Status Badges on Video -->
-        <div class="absolute top-3 left-3 z-20 flex items-center space-x-2">
-          <span class="flex items-center space-x-1 bg-red-600/90 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full tracking-wider shadow">
+        <div class="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 z-20 flex items-center space-x-1.5 sm:space-x-2">
+          <span class="flex items-center space-x-1 bg-red-600/90 text-white text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 rounded-full tracking-wider shadow">
             <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
             <span>EN VIVO</span>
           </span>
-          <span id="motionBadge" class="hidden items-center space-x-1 bg-amber-500 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow animate-bounce">
+          <span id="motionBadge" class="hidden items-center space-x-1 bg-amber-500 text-black text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shadow animate-bounce">
             <i data-lucide="bell" class="w-3 h-3"></i>
             <span>MOVIMIENTO</span>
           </span>
-          <span id="streamDelayBadge" class="text-[10px] text-zinc-400 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur border border-white/10">
+          <span id="streamDelayBadge" class="hidden sm:inline-block text-[10px] text-zinc-400 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur border border-white/10">
             ⚡ Ultra Baja Latencia
           </span>
         </div>
 
         <!-- Video Controls on Top Right -->
-        <div class="absolute top-3 right-3 z-20 flex items-center space-x-1.5 sm:space-x-2">
-          <button onclick="reconnectCamera()" class="px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-emerald-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Reconectar Transmisión">
+        <div class="absolute top-2.5 sm:top-3 right-2.5 sm:right-3 z-20 flex items-center space-x-1 sm:space-x-1.5">
+          <button onclick="reconnectCamera()" class="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-emerald-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Reconectar Transmisión">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-emerald-400"></i>
             <span class="hidden sm:inline">Reconectar</span>
           </button>
-          <button onclick="toggleAudio()" id="audioBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Escuchar Micrófono de la Cámara">
+          <button onclick="toggleAudio()" id="audioBtn" class="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/60 hover:bg-black/80 text-zinc-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Escuchar Micrófono de la Cámara">
             <i data-lucide="volume-x" id="audioIcon" class="w-3.5 h-3.5"></i>
-            <span id="audioText">Audio</span>
+            <span id="audioText" class="hidden sm:inline">Audio</span>
           </button>
-          <button onclick="switchTab('intercom')" class="px-2.5 py-1 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-cyan-500/30 transition shadow flex items-center space-x-1" title="Abrir Walkie-Talkie">
+          <button onclick="switchTab('intercom')" class="hidden sm:flex px-2.5 py-1 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-cyan-500/30 transition shadow items-center space-x-1" title="Abrir Walkie-Talkie">
             <i data-lucide="mic" class="w-3.5 h-3.5"></i>
             <span>Hablar</span>
           </button>
-          <button onclick="cycleNightVision()" id="nightVisionBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Visión Nocturna / Filtro Infrarrojo">
+          <button onclick="cycleNightVision()" id="nightVisionBtn" class="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/60 hover:bg-black/80 text-cyan-300 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Visión Nocturna / Filtro Infrarrojo">
             <i data-lucide="moon" id="nightVisionIcon" class="w-3.5 h-3.5 text-cyan-400"></i>
-            <span id="nightVisionText">🌙 Noche</span>
+            <span id="nightVisionText" class="hidden sm:inline">🌙 Noche</span>
           </button>
-          <button onclick="toggleStreamQuality()" id="qualityToggleBtn" class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-emerald-400 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Cambiar Calidad">
+          <button onclick="toggleStreamQuality()" id="qualityToggleBtn" class="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/60 hover:bg-black/80 text-emerald-400 text-xs font-semibold backdrop-blur border border-white/10 transition shadow flex items-center space-x-1" title="Cambiar Calidad">
             <i data-lucide="zap" class="w-3.5 h-3.5"></i>
-            <span id="qualityText">⚡ Fluido (Rápido)</span>
+            <span id="qualityText" class="hidden sm:inline">⚡ Fluido</span>
           </button>
-          <button onclick="takeSnapshot()" class="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Tomar Foto">
-            <i data-lucide="camera" class="w-4 h-4"></i>
+          <button onclick="takeSnapshot()" class="p-1.5 sm:p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Tomar Foto">
+            <i data-lucide="camera" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
-          <button onclick="toggleFullscreen()" class="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Pantalla Completa">
-            <i data-lucide="maximize" class="w-4 h-4"></i>
+          <button onclick="toggleFullscreen()" class="p-1.5 sm:p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur border border-white/10 transition shadow" title="Pantalla Completa">
+            <i data-lucide="maximize" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
         </div>
 
@@ -219,22 +222,56 @@
         </div>
 
         <!-- Video Bottom Info Bar -->
-        <div class="px-4 py-2 bg-zinc-900 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
-          <div class="flex items-center space-x-2.5">
-            <span>RTSP: <code class="text-zinc-300 font-mono">rtsp://admin:@<span class="cam-ip">192.168.1.13</span>:88/videoMain</code></span>
+        <div class="px-3 sm:px-4 py-2 bg-zinc-900 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+          <div class="flex items-center space-x-2 sm:space-x-2.5">
+            <span class="hidden sm:inline">RTSP: <code class="text-zinc-300 font-mono">rtsp://admin:@<span class="cam-ip">192.168.1.13</span>:88/videoMain</code></span>
             <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center space-x-1" title="Perfil de codificación de hardware activo en DSP Hi3518C">
               <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
               <span>30 FPS • GOP 15 (0.5s) • CBR</span>
             </span>
           </div>
           <div class="flex items-center space-x-2">
-            <span id="timestampNow" class="font-mono">--:--:--</span>
+            <span id="timestampNow" class="font-mono text-xs">--:--:--</span>
           </div>
         </div>
       </div>
 
+      <!-- Mobile Segmented Navigation Bar (Only on mobile: block lg:hidden) -->
+      <div class="block lg:hidden sticky top-14 sm:top-16 z-40 bg-zinc-950/95 backdrop-blur-md py-2 border-b border-zinc-800/90 -mx-3 px-3 sm:-mx-6 sm:px-6 shadow-lg">
+        <div class="flex items-center space-x-1.5 overflow-x-auto scrollbar-none py-0.5 text-xs font-semibold">
+          <button onclick="setMobileView('ptz')" id="mobNav-ptz" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-emerald-600 text-white shadow-md">
+            <i data-lucide="move" class="w-3.5 h-3.5"></i>
+            <span>🕹️ Mando</span>
+          </button>
+          <button onclick="setMobileView('3d')" id="mobNav-3d" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="compass" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>🧭 3D Radar</span>
+          </button>
+          <button onclick="setMobileView('intercom')" id="mobNav-intercom" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="mic" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>🎙️ Hablar</span>
+          </button>
+          <button onclick="setMobileView('ai')" id="mobNav-ai" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="brain-circuit" class="w-3.5 h-3.5 text-purple-400"></i>
+            <span>🤖 IA</span>
+          </button>
+          <button onclick="setMobileView('drive')" id="mobNav-drive" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="cloud" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span>☁️ Nube</span>
+          </button>
+          <button onclick="setMobileView('galeria')" id="mobNav-galeria" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>📸 Fotos</span>
+          </button>
+          <button onclick="setMobileView('ajustes')" id="mobNav-ajustes" class="mob-nav-btn shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200">
+            <i data-lucide="sliders" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>⚙️ Ajustes</span>
+          </button>
+        </div>
+      </div>
+
       <!-- PTZ Joystick & Directional Controls Card -->
-      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl">
+      <div id="ptzCard" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xl">
         
         <!-- Card Header: Title & Dynamic Motion State -->
         <div class="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-zinc-800">
@@ -408,7 +445,7 @@
             </div>
 
             <!-- Keyboard shortcut guide helper -->
-            <div class="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-[11px] text-zinc-400 leading-tight">
+            <div class="hidden md:block p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-[11px] text-zinc-400 leading-tight">
               <div class="flex items-center space-x-1 text-emerald-400 font-semibold mb-1">
                 <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
                 <span>Atajos Rápidos de Teclado</span>
@@ -424,7 +461,7 @@
       </div>
 
       <!-- 3D Spatial Orientation & Precision Angle Control Card -->
-      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
+      <div id="threeCard" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-3 pb-3 border-b border-zinc-800">
           <div class="flex items-center space-x-2.5">
             <div class="w-8 h-8 rounded-lg bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center">
@@ -612,44 +649,44 @@
     </section>
 
     <!-- RIGHT COLUMN: Tabbed Control Panel (Cols 5 on lg) -->
-    <section class="lg:col-span-5 flex flex-col">
-      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl flex-1 flex flex-col">
+    <section id="rightTabsSection" class="lg:col-span-5 flex flex-col">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl flex-1 flex flex-col">
         
         <!-- Tabs Header -->
-        <div class="flex space-x-1 border-b border-zinc-800 pb-3 mb-4 overflow-x-auto">
-          <button onclick="switchTab('imagen')" id="tabBtn-imagen" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white flex items-center space-x-1.5 transition">
+        <div class="flex space-x-1.5 border-b border-zinc-800 pb-3 mb-4 overflow-x-auto scrollbar-none py-0.5">
+          <button onclick="switchTab('imagen')" id="tabBtn-imagen" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white flex items-center space-x-1.5 transition">
             <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
             <span>Imagen</span>
           </button>
-          <button onclick="switchTab('nocturna')" id="tabBtn-nocturna" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('nocturna')" id="tabBtn-nocturna" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="moon" class="w-3.5 h-3.5"></i>
             <span>Noche / IR</span>
           </button>
-          <button onclick="switchTab('movimiento')" id="tabBtn-movimiento" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('movimiento')" id="tabBtn-movimiento" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
             <span>Alarmas</span>
           </button>
-          <button onclick="switchTab('wifi')" id="tabBtn-wifi" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('wifi')" id="tabBtn-wifi" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
             <span>Wi-Fi</span>
           </button>
-          <button onclick="switchTab('galeria')" id="tabBtn-galeria" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('galeria')" id="tabBtn-galeria" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="image" class="w-3.5 h-3.5"></i>
             <span>Fotos</span>
           </button>
-          <button onclick="switchTab('intercom')" id="tabBtn-intercom" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('intercom')" id="tabBtn-intercom" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="mic" class="w-3.5 h-3.5 text-cyan-400"></i>
             <span>Intercom</span>
           </button>
-          <button onclick="switchTab('drive')" id="tabBtn-drive" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('drive')" id="tabBtn-drive" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="cloud" class="w-3.5 h-3.5 text-blue-400"></i>
             <span>Grabación / 5TB</span>
           </button>
-          <button onclick="switchTab('ai')" id="tabBtn-ai" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('ai')" id="tabBtn-ai" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="brain-circuit" class="w-3.5 h-3.5 text-purple-400"></i>
             <span>IA & Telegram</span>
           </button>
-          <button onclick="switchTab('sistema')" id="tabBtn-sistema" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
+          <button onclick="switchTab('sistema')" id="tabBtn-sistema" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center space-x-1.5 transition">
             <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
             <span>Sistema</span>
           </button>
@@ -1996,8 +2033,9 @@
     function on3DWindowResize() {
       const container = document.getElementById('threejs-canvas-container');
       if (!container || !threeCamera || !threeRenderer) return;
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+      const width = container.clientWidth || 320;
+      const height = container.clientHeight || 288;
+      if (width <= 0 || height <= 0) return;
       threeCamera.aspect = width / height;
       threeCamera.updateProjectionMatrix();
       threeRenderer.setSize(width, height);
@@ -3810,6 +3848,78 @@
       }
     }
 
+    // ========================================================
+    // MOBILE WORKSPACE & RESPONSIVE VIEW ENGINE
+    // ========================================================
+    let currentMobileView = 'ptz';
+
+    function setMobileView(view, triggerSwitchTab = true) {
+      currentMobileView = view;
+      
+      // Update active style on mobile segmented nav buttons
+      document.querySelectorAll('.mob-nav-btn').forEach(btn => {
+        btn.classList.remove('bg-emerald-600', 'text-white', 'shadow-md');
+        btn.classList.add('bg-zinc-900', 'border', 'border-zinc-800', 'text-zinc-400');
+      });
+      const activeBtn = document.getElementById(`mobNav-${view}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-emerald-600', 'text-white', 'shadow-md');
+        activeBtn.classList.remove('bg-zinc-900', 'border', 'border-zinc-800', 'text-zinc-400');
+        if (typeof activeBtn.scrollIntoView === 'function') {
+          activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      }
+
+      applyMobileLayout();
+
+      if (triggerSwitchTab) {
+        if (view === 'intercom') switchTab('intercom');
+        else if (view === 'ai') switchTab('ai');
+        else if (view === 'drive') switchTab('drive');
+        else if (view === 'galeria') switchTab('galeria');
+        else if (view === 'ajustes') {
+          const currentVisibleTab = Array.from(document.querySelectorAll('.tab-content')).find(el => !el.classList.contains('hidden'));
+          const activeTabId = currentVisibleTab ? currentVisibleTab.id.replace('tabContent-', '') : '';
+          if (!['imagen', 'nocturna', 'movimiento', 'wifi', 'sistema'].includes(activeTabId)) {
+            switchTab('imagen');
+          }
+        }
+      }
+    }
+
+    function applyMobileLayout() {
+      const isMobile = window.innerWidth < 1024;
+      const ptzCard = document.getElementById('ptzCard');
+      const threeCard = document.getElementById('threeCard');
+      const rightSection = document.getElementById('rightTabsSection');
+
+      if (!isMobile) {
+        // Desktop (>= 1024px): Restore standard dual-column desktop visibility
+        if (ptzCard) ptzCard.style.display = '';
+        if (threeCard) threeCard.style.display = '';
+        if (rightSection) rightSection.style.display = '';
+        return;
+      }
+
+      // Mobile (< 1024px): Display only the single active mobile workspace section
+      if (ptzCard) ptzCard.style.display = (currentMobileView === 'ptz') ? 'block' : 'none';
+      if (threeCard) {
+        const is3d = (currentMobileView === '3d');
+        threeCard.style.display = is3d ? 'block' : 'none';
+        if (is3d) {
+          setTimeout(() => {
+            if (typeof on3DWindowResize === 'function') on3DWindowResize();
+          }, 60);
+        }
+      }
+      if (rightSection) {
+        const isTabSection = ['intercom', 'ai', 'drive', 'galeria', 'ajustes'].includes(currentMobileView);
+        rightSection.style.display = isTabSection ? 'flex' : 'none';
+      }
+    }
+
+    window.addEventListener('resize', applyMobileLayout);
+
     // Tabs
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -3824,6 +3934,18 @@
       if (btn) {
         btn.classList.add('bg-emerald-600', 'text-white');
         btn.classList.remove('bg-zinc-800', 'text-zinc-400');
+        if (typeof btn.scrollIntoView === 'function') {
+          btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      }
+
+      // Sync mobile navigation bar if on mobile
+      if (window.innerWidth < 1024) {
+        if (tabId === 'intercom') setMobileView('intercom', false);
+        else if (tabId === 'ai') setMobileView('ai', false);
+        else if (tabId === 'drive') setMobileView('drive', false);
+        else if (tabId === 'galeria') setMobileView('galeria', false);
+        else setMobileView('ajustes', false);
       }
       
       if (window.lucide) lucide.createIcons();
@@ -3863,6 +3985,7 @@
       setupPttEvents();
       init3DCameraViewer();
       fetchPtzCoordinates();
+      applyMobileLayout();
       
       // Register Service Worker for mobile PWA
       if ('serviceWorker' in navigator) {
