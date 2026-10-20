@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import os
 import re
 import socket
@@ -41,6 +42,34 @@ SNAPSHOTS_DIR = BASE_DIR / "snapshots"
 STATIC_DIR = BASE_DIR / "static"
 SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
+
+def is_go2rtc_available() -> bool:
+    """Checks if local go2rtc proxy is responding on RTSP port 8554."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.15)
+            s.connect(("127.0.0.1", 8554))
+            return True
+    except Exception:
+        return False
+
+def ensure_go2rtc_daemon():
+    """Starts local go2rtc binary in background if not already active."""
+    if not is_go2rtc_available():
+        go2rtc_exe = BASE_DIR / "go2rtc.exe"
+        go2rtc_yaml = BASE_DIR / "go2rtc.yaml"
+        if go2rtc_exe.exists() and go2rtc_yaml.exists():
+            try:
+                subprocess.Popen(
+                    [str(go2rtc_exe), "-config", str(go2rtc_yaml)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+            except Exception:
+                pass
+
+ensure_go2rtc_daemon()
 
 class FoscamCamera:
     def __init__(self, ip: str = "192.168.1.13", port: int = 88, usr: str = "admin", pwd: str = ""):
@@ -286,6 +315,20 @@ class FoscamCamera:
                 return {"result": "-1", "error": str(e)}
 
     def get_snapshot_bytes(self, timeout: float = 3.0) -> bytes:
+        # 1. Ultra-fast instant snapshot directly from go2rtc RAM buffer (sub-5ms)
+        if is_go2rtc_available():
+            try:
+                url_go2rtc = "http://127.0.0.1:1984/api/frame.jpeg?src=foscam"
+                req_g = urllib.request.Request(url_go2rtc, headers={"User-Agent": "FoscamControlCenter"})
+                with urllib.request.urlopen(req_g, timeout=0.8) as resp:
+                    data = resp.read()
+                    if data and len(data) > 1000:
+                        self.is_online = True
+                        return data
+            except Exception:
+                pass
+
+        # 2. Camera hardware CGI fallback
         with self.cgi_lock:
             url = f"http://{self.ip}:{self.port}/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr={self.usr}&pwd={self.pwd}"
             req = urllib.request.Request(url, headers={"User-Agent": "FoscamControlCenter"})
@@ -501,7 +544,13 @@ class RTSPStreamWorker:
 
     def _run(self):
         while self.running:
-            rtsp_url = f"rtsp://{self.camera.usr}:{self.camera.pwd}@{self.camera.ip}:{self.camera.port}/videoMain"
+            # Connect preferentially to local go2rtc proxy stream (protects camera from multiple RTSP connections)
+            if is_go2rtc_available():
+                stream_name = "foscam" if self.mode == "main" else "foscam_sub"
+                rtsp_url = f"rtsp://127.0.0.1:8554/{stream_name}?video"
+            else:
+                rtsp_url = f"rtsp://{self.camera.usr}:{self.camera.pwd}@{self.camera.ip}:{self.camera.port}/videoMain"
+
             scale_filter = "scale=800:-1" if self.mode == "sub" else "scale=1280:-1"
             
             # Ultra low-latency flags:
@@ -791,6 +840,41 @@ def get_stream(request: Request):
             "Connection": "close"
         }
     )
+
+@app.get("/api/go2rtc/status")
+def get_go2rtc_status():
+    available = is_go2rtc_available()
+    streams_info = {}
+    if available:
+        try:
+            req = urllib.request.Request("http://127.0.0.1:1984/api/streams", headers={"User-Agent": "FoscamControlCenter"})
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
+                streams_info = json.loads(resp.read().decode())
+        except Exception:
+            pass
+    return {
+        "running": available,
+        "rtsp_local": "rtsp://127.0.0.1:8554/foscam",
+        "api_local": "http://127.0.0.1:1984",
+        "streams": list(streams_info.keys()) if streams_info else []
+    }
+
+@app.post("/api/webrtc")
+async def post_webrtc_offer(request: Request):
+    """Proxies WebRTC offer/answer negotiation directly to local go2rtc engine."""
+    body = await request.body()
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:1984/api/webrtc?src=foscam",
+            data=body,
+            headers={"Content-Type": request.headers.get("Content-Type", "application/sdp")},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            answer = resp.read()
+            return Response(content=answer, media_type=resp.headers.get_content_type() or "application/sdp")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"go2rtc WebRTC gateway error: {e}")
 
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket):

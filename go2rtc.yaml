@@ -1,0 +1,15 @@
+streams:
+  foscam: rtsp://admin:@192.168.1.13:88/videoMain
+  foscam_sub: rtsp://admin:@192.168.1.13:88/videoSub
+
+api:
+  listen: "127.0.0.1:1984"
+
+rtsp:
+  listen: "127.0.0.1:8554"
+
+webrtc:
+  listen: ":8555"
+
+log:
+  level: info
