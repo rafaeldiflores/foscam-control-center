@@ -45,6 +45,14 @@ La aplicación web funciona como una **Progressive Web App (PWA)** nativa:
   * Barra de cuota en vivo (5 TB) y configuración directa de credenciales en la pestaña *"Grabación / 5TB"*.
   * Reproductor de video integrado para ver grabaciones inmediatamente en la app.
   * Opción de auto-borrado local para conservar espacio en disco tras la subida exitosa a la nube.
+* **Visión Artificial con IA & Auto-Tracking PTZ Inteligente:**
+  * **Algoritmo ByteTrack (100% NumPy):** Seguimiento multi-objeto continuo en dos etapas que conserva objetivos aun en caso de oclusión parcial.
+  * **Fijación de Blanco (Target Locking):** Bloqueo persistente del objetivo (`locked_track_id`) para evitar oscilaciones o titubeos cuando se cruzan varias personas.
+  * **Soporte Multi-Modelo YOLO:** Selector en caliente de modelos ONNX (**YOLOv8**, **YOLO11**, **YOLOv10 NMS-Free** y variantes INT8) desde la interfaz web o API REST.
+  * **Smart Motion Gate:** Ahorro de hasta 80% de CPU al omitir inferencias cuando la escena permanece estática.
+  * **Alertas Push a Telegram:** Envío automático de foto del intruso y botón de acceso directo al streaming con anti-spam cooldown.
+  * *Para detalles de arquitectura y benchmarks, consulta [ARQUITECTURA_Y_OPTIMIZACIONES_IA.md](file:///C:/app%20camara/ARQUITECTURA_Y_OPTIMIZACIONES_IA.md)*.
+* **Proxy de Streaming `go2rtc` Integrado:** Multiplexación RTSP local en loopback y pasarela WebRTC ultrarrápida protegiendo el chipset de la cámara de sobrecargas.
 * **Audio Bidireccional (Walkie-Talkie & Sound Board):**
   * Protocolo propietario Foscam HD PCM 16-bit 8000 Hz decodificado e implementado mediante WebSocket.
   * Botón PTT interactivo con selector manos libres (1 clic).
@@ -62,19 +70,26 @@ La aplicación web funciona como una **Progressive Web App (PWA)** nativa:
 
 ```text
 C:\app camara\
-├── app.py                # Servidor backend principal FastAPI y WebSockets
-├── talk_protocol.py      # Módulo de protocolo de audio talkback Foscam
-├── recorder.py           # Motor de grabación continua segmentada MP4
-├── gdrive_sync.py        # Sincronizador de nube Google Drive API v3
+├── app.py                            # Servidor backend principal FastAPI, WebSockets y API REST
+├── ai_detector.py                    # Motor de visión YOLO ONNX híbrido (v8, 11, v10) y Motion Gate
+├── ai_tracker.py                     # Controlador PTZ con ByteTrack, Target Locking y EMA
+├── telegram_alerts.py                # Sistema de alertas instantáneas con foto a Telegram Bot
+├── talk_protocol.py                  # Protocolo de audio talkback Foscam PCM 8kHz
+├── recorder.py                       # Motor de grabación continua segmentada MP4
+├── gdrive_sync.py                    # Sincronizador de nube Google Drive API v3 (5 TB)
+├── go2rtc.yaml                       # Configuración de proxy multiplexor de video go2rtc
+├── models/                           # Modelos ONNX de detección (YOLOv8, YOLO11, YOLOv10, INT8)
 ├── static/
-│   ├── index.html        # Dashboard frontend interactivo (Tailwind + Lucide + PWA)
-│   ├── manifest.json     # Manifiesto PWA para instalación en Android / iOS
-│   ├── sw.js             # Service Worker para funcionamiento offline y caché
-│   ├── icon-192.png      # Icono de app móvil 192x192
-│   └── icon-512.png      # Icono de app móvil 512x512
-├── recordings/           # Videos segmentados grabados localmente
-├── snapshots/            # Fotos capturadas desde la cámara
-├── credentials/          # Claves JSON de Google Drive (protegidas en .gitignore)
-├── requirements.txt      # Dependencias de Python
-└── README.md             # Documentación del sistema
+│   ├── index.html                    # Dashboard frontend interactivo (Tailwind + Lucide + PWA)
+│   ├── manifest.json                 # Manifiesto PWA para instalación en Android / iOS
+│   ├── sw.js                         # Service Worker para funcionamiento offline y caché
+│   ├── icon-192.png                  # Icono de app móvil 192x192
+│   └── icon-512.png                  # Icono de app móvil 512x512
+├── recordings/                       # Videos segmentados grabados localmente
+├── snapshots/                        # Fotos capturadas desde la cámara
+├── credentials/                      # Claves JSON de Google Drive (protegidas en .gitignore)
+├── requirements.txt                  # Dependencias de Python
+├── DIAGNOSTICO_INICIAL.md            # Diagnóstico exhaustivo inicial de la arquitectura
+├── ARQUITECTURA_Y_OPTIMIZACIONES_IA.md # Informe técnico de optimizaciones, ByteTrack y benchmarks
+└── README.md                         # Documentación del sistema
 ```
